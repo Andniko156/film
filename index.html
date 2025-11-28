@@ -390,6 +390,15 @@
             color: white;
         }
 
+        .btn-danger {
+            background: linear-gradient(to right, #e74c3c, #c0392b);
+            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+        }
+
+        .btn-danger:hover {
+            box-shadow: 0 6px 20px rgba(231, 76, 60, 0.6);
+        }
+
         /* Stats Section */
         .stats-grid {
             display: grid;
@@ -449,6 +458,25 @@
             gap: 8px;
         }
 
+        /* Search Bar */
+        .search-container {
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        .search-input {
+            padding-left: 45px;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray);
+            z-index: 1;
+        }
+
         /* Empty State */
         .empty-state {
             text-align: center;
@@ -465,6 +493,103 @@
         .empty-state h3 {
             font-size: 1.5rem;
             margin-bottom: 10px;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--darker);
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            animation: modalFadeIn 0.3s ease;
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            color: var(--accent);
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            color: var(--light);
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .close-modal:hover {
+            color: var(--secondary);
+        }
+
+        /* Watchlist */
+        .watchlist-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: var(--card-bg);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            transition: var(--transition);
+        }
+
+        .watchlist-item:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .watchlist-poster {
+            width: 60px;
+            height: 90px;
+            object-fit: cover;
+            border-radius: 5px;
+        }
+
+        .watchlist-info {
+            flex: 1;
+        }
+
+        .watchlist-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .watchlist-meta {
+            font-size: 0.9rem;
+            color: var(--gray);
         }
 
         /* Footer */
@@ -517,6 +642,7 @@
                     <ul>
                         <li><a href="#" class="nav-link active" data-page="home">Главная</a></li>
                         <li><a href="#" class="nav-link" data-page="movies">Мои фильмы</a></li>
+                        <li><a href="#" class="nav-link" data-page="watchlist">Хочу посмотреть</a></li>
                         <li><a href="#" class="nav-link" data-page="add">Добавить</a></li>
                         <li><a href="#" class="nav-link" data-page="stats">Статистика</a></li>
                     </ul>
@@ -544,6 +670,11 @@
         <section id="movies" class="page">
             <h1 class="page-title">Моя коллекция</h1>
             
+            <div class="search-container">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" id="search-input" class="search-input" placeholder="Поиск по названию, жанру или году...">
+            </div>
+            
             <div class="filters">
                 <div class="filter-group">
                     <label for="type-filter">Тип:</label>
@@ -563,6 +694,18 @@
                 </div>
                 
                 <div class="filter-group">
+                    <label for="rating-filter">Оценка:</label>
+                    <select id="rating-filter">
+                        <option value="all">Любая</option>
+                        <option value="5">5 звёзд</option>
+                        <option value="4">4+ звёзды</option>
+                        <option value="3">3+ звёзды</option>
+                        <option value="2">2+ звёзды</option>
+                        <option value="1">1+ звезда</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
                     <label for="sort-by">Сортировка:</label>
                     <select id="sort-by">
                         <option value="newest">Сначала новые</option>
@@ -571,10 +714,63 @@
                         <option value="title">По названию</option>
                     </select>
                 </div>
+                
+                <div class="filter-group" style="align-self: flex-end;">
+                    <button id="export-btn" class="btn btn-outline">
+                        <i class="fas fa-download"></i> Экспорт
+                    </button>
+                </div>
             </div>
             
             <div id="movies-list" class="movies-grid">
                 <!-- Все фильмы будут здесь -->
+            </div>
+        </section>
+
+        <!-- Страница "Хочу посмотреть" -->
+        <section id="watchlist" class="page">
+            <h1 class="page-title">Хочу посмотреть</h1>
+            
+            <div class="form-container">
+                <form id="add-watchlist-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="watchlist-title">Название *</label>
+                            <input type="text" id="watchlist-title" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="watchlist-type">Тип *</label>
+                            <select id="watchlist-type" required>
+                                <option value="movie">Фильм</option>
+                                <option value="series">Сериал</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="watchlist-genre">Жанр</label>
+                            <input type="text" id="watchlist-genre" placeholder="Например: драма, комедия, фантастика">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="watchlist-year">Год выпуска</label>
+                            <input type="number" id="watchlist-year" min="1900" max="2030">
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label for="watchlist-poster">Ссылка на постер</label>
+                            <input type="url" id="watchlist-poster" placeholder="https://example.com/poster.jpg">
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-accent" style="width: 100%; margin-top: 20px;">
+                        <i class="fas fa-plus-circle"></i> Добавить в список
+                    </button>
+                </form>
+            </div>
+            
+            <div id="watchlist-items" style="margin-top: 40px;">
+                <!-- Элементы списка "Хочу посмотреть" будут здесь -->
             </div>
         </section>
 
@@ -671,14 +867,45 @@
                     <div class="stat-value" id="total-series-count">0</div>
                     <div class="stat-label">Сериалы</div>
                 </div>
+                
+                <div class="stat-card">
+                    <div class="stat-value" id="watchlist-count">0</div>
+                    <div class="stat-label">В списке ожидания</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-value" id="favorite-genre">-</div>
+                    <div class="stat-label">Любимый жанр</div>
+                </div>
             </div>
             
             <h2 style="margin: 40px 0 20px; text-align: center; color: var(--accent);">Любимые жанры</h2>
             <div id="genre-list" class="genre-stats">
                 <!-- Статистика по жанрам будет здесь -->
             </div>
+            
+            <div style="text-align: center; margin-top: 40px;">
+                <button id="reset-data-btn" class="btn btn-danger">
+                    <i class="fas fa-trash"></i> Сбросить все данные
+                </button>
+            </div>
         </section>
     </main>
+
+    <!-- Модальное окно подтверждения сброса данных -->
+    <div id="reset-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Подтверждение сброса</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <p>Вы уверены, что хотите удалить все данные? Это действие нельзя отменить.</p>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button id="confirm-reset" class="btn btn-danger" style="flex: 1;">Да, удалить всё</button>
+                <button id="cancel-reset" class="btn btn-outline" style="flex: 1;">Отмена</button>
+            </div>
+        </div>
+    </div>
 
     <footer>
         <div class="container">
@@ -689,16 +916,27 @@
     <script>
         // Данные приложения
         let movies = JSON.parse(localStorage.getItem('movies')) || [];
+        let watchlist = JSON.parse(localStorage.getItem('watchlist')) || [];
         
         // Элементы DOM
         const pages = document.querySelectorAll('.page');
         const navLinks = document.querySelectorAll('.nav-link');
         const addMovieForm = document.getElementById('add-movie-form');
+        const addWatchlistForm = document.getElementById('add-watchlist-form');
         const moviesList = document.getElementById('movies-list');
         const recentMoviesList = document.getElementById('recent-movies-list');
+        const watchlistItems = document.getElementById('watchlist-items');
         const typeFilter = document.getElementById('type-filter');
         const genreFilter = document.getElementById('genre-filter');
+        const ratingFilter = document.getElementById('rating-filter');
         const sortBy = document.getElementById('sort-by');
+        const searchInput = document.getElementById('search-input');
+        const exportBtn = document.getElementById('export-btn');
+        const resetDataBtn = document.getElementById('reset-data-btn');
+        const resetModal = document.getElementById('reset-modal');
+        const confirmReset = document.getElementById('confirm-reset');
+        const cancelReset = document.getElementById('cancel-reset');
+        const closeModal = document.querySelector('.close-modal');
         
         // Навигация
         navLinks.forEach(link => {
@@ -727,6 +965,8 @@
                 displayRecentMovies();
             } else if (pageId === 'stats') {
                 updateStats();
+            } else if (pageId === 'watchlist') {
+                displayWatchlist();
             }
         }
         
@@ -773,17 +1013,54 @@
             showPage('home');
         });
         
+        // Добавление в список "Хочу посмотреть"
+        addWatchlistForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const title = document.getElementById('watchlist-title').value;
+            const type = document.getElementById('watchlist-type').value;
+            const genre = document.getElementById('watchlist-genre').value;
+            const year = document.getElementById('watchlist-year').value;
+            const poster = document.getElementById('watchlist-poster').value;
+            
+            const newItem = {
+                id: Date.now(),
+                title,
+                type,
+                genre,
+                year,
+                poster,
+                dateAdded: new Date().toISOString()
+            };
+            
+            watchlist.unshift(newItem);
+            saveWatchlist();
+            addWatchlistForm.reset();
+            
+            // Показываем уведомление
+            showNotification('Фильм добавлен в список "Хочу посмотреть"!', 'success');
+            
+            // Обновляем отображение списка
+            displayWatchlist();
+        });
+        
         // Отображение фильмов
         function displayMovies() {
             moviesList.innerHTML = '';
             
             const filterType = typeFilter.value;
             const filterGenre = genreFilter.value;
+            const filterRating = ratingFilter.value;
             const sortOption = sortBy.value;
+            const searchQuery = searchInput.value.toLowerCase();
             
             let filteredMovies = movies.filter(movie => {
                 if (filterType !== 'all' && movie.type !== filterType) return false;
                 if (filterGenre !== 'all' && (!movie.genre || !movie.genre.toLowerCase().includes(filterGenre.toLowerCase()))) return false;
+                if (filterRating !== 'all' && movie.rating < parseInt(filterRating)) return false;
+                if (searchQuery && !movie.title.toLowerCase().includes(searchQuery) && 
+                    !(movie.genre && movie.genre.toLowerCase().includes(searchQuery)) &&
+                    !(movie.year && movie.year.toString().includes(searchQuery))) return false;
                 return true;
             });
             
@@ -807,9 +1084,9 @@
                 moviesList.innerHTML = `
                     <div class="empty-state">
                         <i class="fas fa-film"></i>
-                        <h3>Пока нет добавленных фильмов</h3>
-                        <p>Начните добавлять фильмы и сериалы, чтобы они появились здесь</p>
-                        <a href="#" class="btn nav-link" data-page="add" style="margin-top: 20px;">Добавить первый фильм</a>
+                        <h3>Фильмы не найдены</h3>
+                        <p>Попробуйте изменить параметры поиска или фильтрации</p>
+                        <a href="#" class="btn nav-link" data-page="add" style="margin-top: 20px;">Добавить фильм</a>
                     </div>
                 `;
                 
@@ -861,6 +1138,104 @@
                 const movieCard = createMovieCard(movie);
                 recentMoviesList.appendChild(movieCard);
             });
+        }
+        
+        // Отображение списка "Хочу посмотреть"
+        function displayWatchlist() {
+            watchlistItems.innerHTML = '';
+            
+            if (watchlist.length === 0) {
+                watchlistItems.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-bookmark"></i>
+                        <h3>Список "Хочу посмотреть" пуст</h3>
+                        <p>Добавьте фильмы и сериалы, которые планируете посмотреть</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            watchlist.forEach(item => {
+                const watchlistItem = document.createElement('div');
+                watchlistItem.className = 'watchlist-item';
+                
+                const posterSrc = item.poster || 'https://via.placeholder.com/60x90/1a1a2e/6a11cb?text=No+Image';
+                
+                watchlistItem.innerHTML = `
+                    <img src="${posterSrc}" alt="${item.title}" class="watchlist-poster" onerror="this.src='https://via.placeholder.com/60x90/1a1a2e/6a11cb?text=No+Image'">
+                    <div class="watchlist-info">
+                        <div class="watchlist-title">${item.title}</div>
+                        <div class="watchlist-meta">
+                            <span>${item.type === 'movie' ? 'Фильм' : 'Сериал'}</span>
+                            <span> • </span>
+                            <span>${item.year || 'Год не указан'}</span>
+                            <span> • </span>
+                            <span>${item.genre || 'Жанр не указан'}</span>
+                        </div>
+                    </div>
+                    <div class="watchlist-actions">
+                        <button class="btn btn-small btn-accent move-to-watched-btn" data-id="${item.id}">
+                            <i class="fas fa-eye"></i> Посмотрел
+                        </button>
+                        <button class="btn btn-small btn-danger delete-watchlist-btn" data-id="${item.id}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                
+                // Добавляем обработчики событий для кнопок
+                watchlistItem.querySelector('.delete-watchlist-btn').addEventListener('click', () => {
+                    deleteWatchlistItem(item.id);
+                });
+                
+                watchlistItem.querySelector('.move-to-watched-btn').addEventListener('click', () => {
+                    moveToWatched(item);
+                });
+                
+                watchlistItems.appendChild(watchlistItem);
+            });
+        }
+        
+        // Перемещение из списка "Хочу посмотреть" в просмотренные
+        function moveToWatched(item) {
+            // Удаляем из списка "Хочу посмотреть"
+            watchlist = watchlist.filter(watchlistItem => watchlistItem.id !== item.id);
+            saveWatchlist();
+            
+            // Добавляем в просмотренные с нулевым рейтингом
+            const newMovie = {
+                id: Date.now(),
+                title: item.title,
+                type: item.type,
+                genre: item.genre,
+                year: item.year,
+                dateWatched: new Date().toISOString().split('T')[0],
+                rating: 0,
+                comment: '',
+                poster: item.poster,
+                dateAdded: new Date().toISOString()
+            };
+            
+            movies.unshift(newMovie);
+            saveMovies();
+            
+            // Показываем уведомление
+            showNotification('Фильм перемещен в просмотренные!', 'success');
+            
+            // Обновляем отображение
+            displayWatchlist();
+            updateStats();
+        }
+        
+        // Удаление из списка "Хочу посмотреть"
+        function deleteWatchlistItem(id) {
+            if (confirm('Удалить этот фильм из списка "Хочу посмотреть"?')) {
+                watchlist = watchlist.filter(item => item.id !== id);
+                saveWatchlist();
+                displayWatchlist();
+                updateStats();
+                showNotification('Фильм удален из списка "Хочу посмотреть"', 'info');
+            }
         }
         
         // Создание карточки фильма
@@ -953,6 +1328,7 @@
             const totalMovies = movies.length;
             const moviesCount = movies.filter(m => m.type === 'movie').length;
             const seriesCount = movies.filter(m => m.type === 'series').length;
+            const watchlistCount = watchlist.length;
             
             const totalRating = movies.reduce((sum, movie) => sum + movie.rating, 0);
             const avgRating = totalMovies > 0 ? (totalRating / totalMovies).toFixed(1) : 0;
@@ -961,6 +1337,7 @@
             document.getElementById('avg-rating').textContent = avgRating;
             document.getElementById('total-movies-count').textContent = moviesCount;
             document.getElementById('total-series-count').textContent = seriesCount;
+            document.getElementById('watchlist-count').textContent = watchlistCount;
             
             // Статистика по жанрам
             const genreStats = {};
@@ -977,6 +1354,14 @@
             
             const genreList = document.getElementById('genre-list');
             genreList.innerHTML = '';
+            
+            // Определяем любимый жанр
+            let favoriteGenre = '-';
+            if (Object.keys(genreStats).length > 0) {
+                const sortedGenres = Object.entries(genreStats).sort((a, b) => b[1] - a[1]);
+                favoriteGenre = sortedGenres[0][0];
+                document.getElementById('favorite-genre').textContent = favoriteGenre;
+            }
             
             if (Object.keys(genreStats).length === 0) {
                 genreList.innerHTML = '<div class="empty-state"><p>Жанры не указаны</p></div>';
@@ -1021,6 +1406,55 @@
             });
         }
         
+        // Экспорт данных
+        exportBtn.addEventListener('click', () => {
+            const data = {
+                movies: movies,
+                watchlist: watchlist,
+                exportDate: new Date().toISOString()
+            };
+            
+            const dataStr = JSON.stringify(data, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `CineDairy-backup-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            showNotification('Данные успешно экспортированы!', 'success');
+        });
+        
+        // Сброс данных
+        resetDataBtn.addEventListener('click', () => {
+            resetModal.classList.add('active');
+        });
+        
+        confirmReset.addEventListener('click', () => {
+            movies = [];
+            watchlist = [];
+            saveMovies();
+            saveWatchlist();
+            displayMovies();
+            displayRecentMovies();
+            displayWatchlist();
+            updateStats();
+            resetModal.classList.remove('active');
+            showNotification('Все данные были сброшены', 'info');
+        });
+        
+        cancelReset.addEventListener('click', () => {
+            resetModal.classList.remove('active');
+        });
+        
+        closeModal.addEventListener('click', () => {
+            resetModal.classList.remove('active');
+        });
+        
         // Показать уведомление
         function showNotification(message, type = 'info') {
             // Создаем элемент уведомления
@@ -1062,15 +1496,23 @@
             localStorage.setItem('movies', JSON.stringify(movies));
         }
         
+        // Сохранение списка "Хочу посмотреть" в localStorage
+        function saveWatchlist() {
+            localStorage.setItem('watchlist', JSON.stringify(watchlist));
+        }
+        
         // Инициализация приложения
         function init() {
             displayRecentMovies();
             updateStats();
+            displayWatchlist();
             
             // Обработчики для фильтров
             typeFilter.addEventListener('change', displayMovies);
             genreFilter.addEventListener('change', displayMovies);
+            ratingFilter.addEventListener('change', displayMovies);
             sortBy.addEventListener('change', displayMovies);
+            searchInput.addEventListener('input', displayMovies);
         }
         
         // Запуск приложения после загрузки DOM
