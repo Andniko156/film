@@ -477,6 +477,70 @@
             z-index: 1;
         }
 
+        /* API Search Results */
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--darker);
+            border-radius: 10px;
+            margin-top: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 10;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: none;
+        }
+
+        .search-result-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 10px 15px;
+            cursor: pointer;
+            transition: var(--transition);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+
+        .search-result-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .search-result-poster {
+            width: 40px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 5px;
+        }
+
+        .search-result-info {
+            flex: 1;
+        }
+
+        .search-result-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .search-result-meta {
+            font-size: 0.8rem;
+            color: var(--gray);
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .kp-rating {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
         /* Empty State */
         .empty-state {
             text-align: center;
@@ -592,6 +656,44 @@
             color: var(--gray);
         }
 
+        /* Loading Spinner */
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--accent);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* API Key Setup */
+        .api-setup {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid var(--accent);
+        }
+
+        .api-setup h3 {
+            color: var(--accent);
+            margin-bottom: 10px;
+        }
+
+        .api-setup ol {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        .api-setup li {
+            margin-bottom: 5px;
+        }
+
         /* Footer */
         footer {
             text-align: center;
@@ -681,7 +783,9 @@
                     <select id="type-filter">
                         <option value="all">Все</option>
                         <option value="movie">Фильмы</option>
-                        <option value="series">Сериалы</option>
+                        <option value="tv-series">Сериалы</option>
+                        <option value="cartoon">Мультфильмы</option>
+                        <option value="anime">Аниме</option>
                     </select>
                 </div>
                 
@@ -743,7 +847,9 @@
                             <label for="watchlist-type">Тип *</label>
                             <select id="watchlist-type" required>
                                 <option value="movie">Фильм</option>
-                                <option value="series">Сериал</option>
+                                <option value="tv-series">Сериал</option>
+                                <option value="cartoon">Мультфильм</option>
+                                <option value="anime">Аниме</option>
                             </select>
                         </div>
                         
@@ -779,6 +885,26 @@
             <h1 class="page-title">Добавить фильм или сериал</h1>
             
             <div class="form-container">
+                <div class="api-setup">
+                    <h3><i class="fas fa-info-circle"></i> Настройка Kinopoisk API</h3>
+                    <p>Для автоматического поиска фильмов необходимо:</p>
+                    <ol>
+                        <li>Получить API ключ на <a href="https://kinopoisk.dev/" target="_blank" style="color: var(--accent);">kinopoisk.dev</a></li>
+                        <li>Вставить ключ в поле ниже</li>
+                        <li>Сохранить настройки</li>
+                    </ol>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="password" id="api-key-input" placeholder="Введите ваш API ключ" style="flex: 1;">
+                        <button id="save-api-key" class="btn btn-small">Сохранить</button>
+                    </div>
+                </div>
+                
+                <div class="search-container" style="margin-bottom: 20px;">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" id="api-search" class="search-input" placeholder="Начните вводить название фильма или сериала...">
+                    <div id="search-results" class="search-results"></div>
+                </div>
+                
                 <form id="add-movie-form">
                     <div class="form-grid">
                         <div class="form-group">
@@ -790,7 +916,9 @@
                             <label for="type">Тип *</label>
                             <select id="type" required>
                                 <option value="movie">Фильм</option>
-                                <option value="series">Сериал</option>
+                                <option value="tv-series">Сериал</option>
+                                <option value="cartoon">Мультфильм</option>
+                                <option value="anime">Аниме</option>
                             </select>
                         </div>
                         
@@ -909,11 +1037,22 @@
 
     <footer>
         <div class="container">
-            <p>CineDairy &copy; 2023 - Ваш личный кино-дневник</p>
+            <p>CineDairy &copy; 2023 - Ваш личный кино-дневник | Использует Kinopoisk Unofficial API</p>
         </div>
     </footer>
 
     <script>
+        // Конфигурация Kinopoisk API
+        const KINOPOISK_API = {
+            baseUrl: 'https://api.kinopoisk.dev/v1.4',
+            getApiKey() {
+                return localStorage.getItem('kinopoiskApiKey') || '';
+            },
+            setApiKey(key) {
+                localStorage.setItem('kinopoiskApiKey', key);
+            }
+        };
+
         // Данные приложения
         let movies = JSON.parse(localStorage.getItem('movies')) || [];
         let watchlist = JSON.parse(localStorage.getItem('watchlist')) || [];
@@ -931,12 +1070,19 @@
         const ratingFilter = document.getElementById('rating-filter');
         const sortBy = document.getElementById('sort-by');
         const searchInput = document.getElementById('search-input');
+        const apiSearch = document.getElementById('api-search');
+        const searchResults = document.getElementById('search-results');
+        const apiKeyInput = document.getElementById('api-key-input');
+        const saveApiKeyBtn = document.getElementById('save-api-key');
         const exportBtn = document.getElementById('export-btn');
         const resetDataBtn = document.getElementById('reset-data-btn');
         const resetModal = document.getElementById('reset-modal');
         const confirmReset = document.getElementById('confirm-reset');
         const cancelReset = document.getElementById('cancel-reset');
         const closeModal = document.querySelector('.close-modal');
+        
+        // Переменные для управления API запросами
+        let searchTimeout;
         
         // Навигация
         navLinks.forEach(link => {
@@ -967,7 +1113,144 @@
                 updateStats();
             } else if (pageId === 'watchlist') {
                 displayWatchlist();
+            } else if (pageId === 'add') {
+                // Загружаем сохраненный API ключ
+                apiKeyInput.value = KINOPOISK_API.getApiKey();
             }
+        }
+        
+        // Сохранение API ключа
+        saveApiKeyBtn.addEventListener('click', () => {
+            const apiKey = apiKeyInput.value.trim();
+            if (apiKey) {
+                KINOPOISK_API.setApiKey(apiKey);
+                showNotification('API ключ успешно сохранен!', 'success');
+            } else {
+                showNotification('Введите API ключ', 'error');
+            }
+        });
+        
+        // Поиск через Kinopoisk API
+        apiSearch.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            const query = e.target.value.trim();
+            
+            if (query.length < 2) {
+                searchResults.style.display = 'none';
+                return;
+            }
+            
+            searchTimeout = setTimeout(() => {
+                searchKinopoisk(query);
+            }, 500);
+        });
+        
+        // Поиск фильмов через Kinopoisk API
+        async function searchKinopoisk(query) {
+            const apiKey = KINOPOISK_API.getApiKey();
+            
+            if (!apiKey) {
+                searchResults.innerHTML = '<div class="search-result-item">Введите API ключ Kinopoisk</div>';
+                searchResults.style.display = 'block';
+                return;
+            }
+            
+            try {
+                searchResults.innerHTML = '<div class="search-result-item"><div class="spinner"></div> Поиск...</div>';
+                searchResults.style.display = 'block';
+                
+                const response = await fetch(
+                    `${KINOPOISK_API.baseUrl}/movie/search?page=1&limit=10&query=${encodeURIComponent(query)}`,
+                    {
+                        headers: {
+                            'X-API-KEY': apiKey
+                        }
+                    }
+                );
+                
+                if (!response.ok) {
+                    throw new Error('Ошибка при поиске фильмов');
+                }
+                
+                const data = await response.json();
+                displayKinopoiskResults(data.docs);
+            } catch (error) {
+                console.error('Ошибка поиска:', error);
+                searchResults.innerHTML = '<div class="search-result-item">Ошибка при поиске. Проверьте API ключ.</div>';
+            }
+        }
+        
+        // Отображение результатов поиска Kinopoisk
+        function displayKinopoiskResults(results) {
+            searchResults.innerHTML = '';
+            
+            if (!results || results.length === 0) {
+                searchResults.innerHTML = '<div class="search-result-item">Ничего не найдено</div>';
+                return;
+            }
+            
+            results.forEach(item => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'search-result-item';
+                
+                const posterSrc = item.poster ? item.poster.previewUrl : 
+                    'https://via.placeholder.com/40x60/1a1a2e/6a11cb?text=No+Image';
+                
+                const year = item.year || '';
+                const rating = item.rating ? item.rating.kp.toFixed(1) : '—';
+                const type = getKinopoiskType(item.type);
+                
+                resultItem.innerHTML = `
+                    <img src="${posterSrc}" alt="${item.name}" class="search-result-poster" onerror="this.src='https://via.placeholder.com/40x60/1a1a2e/6a11cb?text=No+Image'">
+                    <div class="search-result-info">
+                        <div class="search-result-title">${item.name || item.alternativeName || 'Без названия'}</div>
+                        <div class="search-result-meta">
+                            <span>${type}</span>
+                            ${year ? `<span>${year}</span>` : ''}
+                            <span class="kp-rating">КП: ${rating}</span>
+                        </div>
+                    </div>
+                `;
+                
+                resultItem.addEventListener('click', () => {
+                    fillFormWithKinopoiskData(item);
+                });
+                
+                searchResults.appendChild(resultItem);
+            });
+        }
+        
+        // Определение типа контента Kinopoisk
+        function getKinopoiskType(kinopoiskType) {
+            const typeMap = {
+                'movie': 'Фильм',
+                'tv-series': 'Сериал',
+                'cartoon': 'Мультфильм',
+                'anime': 'Аниме',
+                'animated-series': 'Анимационный сериал'
+            };
+            return typeMap[kinopoiskType] || 'Фильм';
+        }
+        
+        // Заполнение формы данными из Kinopoisk
+        function fillFormWithKinopoiskData(movieData) {
+            const title = movieData.name || movieData.alternativeName || '';
+            const year = movieData.year || '';
+            const poster = movieData.poster ? movieData.poster.url : '';
+            const genres = movieData.genres ? movieData.genres.map(genre => genre.name).join(', ') : '';
+            
+            // Заполняем основные поля
+            document.getElementById('title').value = title;
+            document.getElementById('type').value = movieData.type || 'movie';
+            document.getElementById('year').value = year;
+            document.getElementById('genre').value = genres;
+            document.getElementById('poster').value = poster;
+            
+            // Скрываем результаты поиска
+            searchResults.style.display = 'none';
+            apiSearch.value = '';
+            
+            showNotification('Данные загружены из Kinopoisk!', 'success');
         }
         
         // Добавление нового фильма
@@ -1166,7 +1449,7 @@
                     <div class="watchlist-info">
                         <div class="watchlist-title">${item.title}</div>
                         <div class="watchlist-meta">
-                            <span>${item.type === 'movie' ? 'Фильм' : 'Сериал'}</span>
+                            <span>${getKinopoiskType(item.type)}</span>
                             <span> • </span>
                             <span>${item.year || 'Год не указан'}</span>
                             <span> • </span>
@@ -1251,7 +1534,7 @@
                 <div class="movie-info">
                     <div class="movie-title">${movie.title}</div>
                     <div class="movie-meta">
-                        <span>${movie.type === 'movie' ? 'Фильм' : 'Сериал'}</span>
+                        <span>${getKinopoiskType(movie.type)}</span>
                         <span>${movie.year || 'Не указан'}</span>
                     </div>
                     <div class="movie-rating">
@@ -1327,7 +1610,7 @@
         function updateStats() {
             const totalMovies = movies.length;
             const moviesCount = movies.filter(m => m.type === 'movie').length;
-            const seriesCount = movies.filter(m => m.type === 'series').length;
+            const seriesCount = movies.filter(m => m.type === 'tv-series').length;
             const watchlistCount = watchlist.length;
             
             const totalRating = movies.reduce((sum, movie) => sum + movie.rating, 0);
@@ -1513,6 +1796,13 @@
             ratingFilter.addEventListener('change', displayMovies);
             sortBy.addEventListener('change', displayMovies);
             searchInput.addEventListener('input', displayMovies);
+            
+            // Закрытие результатов поиска при клике вне области
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.search-container')) {
+                    searchResults.style.display = 'none';
+                }
+            });
         }
         
         // Запуск приложения после загрузки DOM
