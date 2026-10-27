@@ -10,3 +10,5 @@
 server/**/__pycache__/
 server/*.sqlite3
 server/.env
+!deploy/
+!deploy/backup.sh

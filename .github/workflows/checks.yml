@@ -64,5 +64,27 @@ jobs:
           p.write_text(s)
           PY
           docker compose config --quiet
-          docker compose build app
-          docker compose run --rm --no-deps app python manage.py check --deploy --fail-level ERROR
+          docker compose build app migrate backup
+          docker compose up -d db
+          docker compose --profile tools run --rm migrate
+          docker compose up -d app
+          docker compose exec -T app python manage.py check --deploy --fail-level ERROR
+          docker compose exec -T app python manage.py shell <<'PY'
+          from django.db import connection, transaction
+          from cinema.security import create_user
+          from cinema.models import Archive
+          from cinema.archive import replace, read
+          from cinema.tests import fixture
+          with connection.cursor() as cursor:
+              cursor.execute("SELECT rolsuper, rolcreatedb, rolcreaterole FROM pg_roles WHERE rolname = current_user")
+              assert cursor.fetchone() == (False, False, False)
+              cursor.execute("SELECT has_schema_privilege(current_user, 'public', 'CREATE')")
+              assert cursor.fetchone() == (False,)
+          with transaction.atomic():
+              user = create_user()
+              archive = Archive.objects.select_for_update().get(user=user)
+              replace(archive, fixture())
+              assert len(read(archive)['quotes']) == 1
+              user.delete()
+          print('Runtime role: private archive CRUD succeeds; administrative and schema privileges denied.')
+          PY
