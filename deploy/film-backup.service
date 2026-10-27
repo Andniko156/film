@@ -1,0 +1,12 @@
+[Unit]
+Description=Encrypted CineDairy PostgreSQL backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/film
+ExecStart=/usr/bin/docker compose --profile tools run --rm backup
+ExecStart=/usr/bin/docker compose exec -T app python manage.py prune_auth
+# Add an ExecStart to copy encrypted backups to your private off-server storage.
+# Its failure must fail this unit; configure a monitoring alert for failed units.

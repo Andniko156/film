@@ -1,3 +1,15 @@
 node_modules/
 playwright-report/
 test-results/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+*.sqlite3
+.venv/
+backups/
+*.dump
+*.dump.age*
+*.agekey
+index.previous.html

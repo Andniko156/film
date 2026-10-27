@@ -1,0 +1,13 @@
+Django==5.2.18
+asgiref==3.13.0
+certifi==2026.10.23
+charset-normalizer==3.5.2
+gunicorn==23.0.0
+idna==3.20
+packaging==26.3
+psycopg==3.3.6
+psycopg-binary==3.3.6
+requests==2.34.2
+sqlparse==0.6.0
+typing_extensions==4.16.0
+urllib3==2.8.0

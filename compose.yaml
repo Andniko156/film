@@ -1,0 +1,108 @@
+name: film
+x-app-env: &app-env
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY}
+  PUBLIC_ORIGIN: https://${DOMAIN:?Set DOMAIN}
+  TRUST_PROXY: '1'
+  PGHOST: db
+  PGPORT: '5432'
+  PGDATABASE: film
+  PGUSER: film_app
+  PGPASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD}
+  # Only for the isolated Docker bridge on one host. For an external DB use verify-full + CA.
+  PGSSLMODE: disable
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_SSL: ${SMTP_SSL:-0}
+  MAIL_FROM: ${MAIL_FROM:-}
+  YANDEX_CLIENT_ID: ${YANDEX_CLIENT_ID:-}
+  YANDEX_CLIENT_SECRET: ${YANDEX_CLIENT_SECRET:-}
+  KINOPOISK_API_KEY: ${KINOPOISK_API_KEY:-}
+services:
+  db:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: film
+      POSTGRES_USER: film_owner
+      POSTGRES_PASSWORD: ${DB_OWNER_PASSWORD:?Set DB_OWNER_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      MIGRATE_DB_PASSWORD: ${MIGRATE_DB_PASSWORD:?Set MIGRATE_DB_PASSWORD}
+      BACKUP_DB_PASSWORD: ${BACKUP_DB_PASSWORD:?Set BACKUP_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/init-db.sh:/docker-entrypoint-initdb.d/10-film.sh:ro
+    networks: [database]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U film_owner -d film']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  migrate:
+    build: .
+    profiles: [tools]
+    environment:
+      <<: *app-env
+      PGUSER: film_migrator
+      PGPASSWORD: ${MIGRATE_DB_PASSWORD}
+    command: ['python', 'manage.py', 'migrate', '--noinput']
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [database]
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    read_only: true
+    tmpfs: [/tmp]
+  app:
+    build: .
+    restart: unless-stopped
+    environment: *app-env
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [database, web]
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    read_only: true
+    tmpfs: [/tmp]
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    networks: [web]
+    depends_on: [app]
+  backup:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.backup
+    profiles: [tools]
+    environment:
+      PGHOST: db
+      PGDATABASE: film
+      PGUSER: film_backup
+      PGPASSWORD: ${BACKUP_DB_PASSWORD}
+      PGSSLMODE: disable
+      AGE_RECIPIENT: ${AGE_RECIPIENT:-}
+    volumes:
+      - ${BACKUP_PATH:-./backups}:/backups
+    networks: [database]
+    depends_on:
+      db: {condition: service_healthy}
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    read_only: true
+    tmpfs: [/tmp]
+networks:
+  database:
+    internal: true
+  web:
+volumes:
+  pgdata:
+  caddydata:
+  caddyconfig:

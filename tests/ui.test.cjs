@@ -19,7 +19,7 @@ const legacy=[
    const u=new URL(route.request().url());
    if(u.hostname==='cinema.test'){
      const filename=u.pathname==='/'?'index.html':u.pathname.slice(1);
-     if(!['index.html','app.js','model.js','styles.css'].includes(filename))return route.fulfill({status:404,body:''});
+     if(!['index.html','app.js','account.js','model.js','styles.css'].includes(filename))return route.fulfill({status:404,body:''});
      return route.fulfill({contentType:filename.endsWith('.js')?'application/javascript':filename.endsWith('.css')?'text/css':'text/html',body:fs.readFileSync(path.join(root,filename),'utf8')});
    }
    if(u.hostname==='kinopoiskapiunofficial.tech')return route.fulfill({status:apiFailure?503:200,contentType:'application/json',body:JSON.stringify({items:[{nameRu:'Солярис',year:1972,type:'FILM',genres:[{genre:'фантастика'}]}]})});
@@ -29,7 +29,7 @@ const legacy=[
  await page.goto('http://cinema.test/');
  assert.equal(await page.locator('.movie-card').count(),0);
  await page.evaluate(data=>{localStorage.removeItem('cinedairy.archive.v2');localStorage.setItem('movies',JSON.stringify(data));localStorage.setItem('watchlist',JSON.stringify([{id:8,title:'Сталкер',type:'FILM',year:1979}]))},legacy);
- await page.reload();
+ await page.reload();await page.waitForFunction(()=>localStorage.getItem('cinedairy.archive.v2'));
  const getDB=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('cinedairy.archive.v2')));
  const nav=async id=>{await page.locator(`.primary-nav a[href="#${id}"]`).click();await page.waitForURL('**/#'+id);await page.locator(`.primary-nav a[href="#${id}"][aria-current="page"]`).waitFor();};
  const click=async(name,id,scope=page)=>scope.locator(`[data-action="${name}"]${id?`[data-id="${id}"]`:''}`).filter({visible:true}).first().click();

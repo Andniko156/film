@@ -1,0 +1,6 @@
+FROM postgres:16-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends age && rm -rf /var/lib/apt/lists/*
+COPY deploy/backup.sh /usr/local/bin/film-backup
+RUN chmod 755 /usr/local/bin/film-backup
+USER postgres
+ENTRYPOINT ["/usr/local/bin/film-backup"]

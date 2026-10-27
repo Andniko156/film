@@ -3,6 +3,8 @@
     const KINOPOISK_API_URL = 'https://kinopoiskapiunofficial.tech/api/v2.2/films';
     const API_KEY_STORAGE = 'cinedairy.kinopoisk-key';
     const M = window.CinemaModel;
+    const Account = window.CinemaAccount;
+    let storage = localStorage;
     const $ = selector => document.querySelector(selector);
     const page = $('#page-content');
     const drawer = $('#movie-dialog');
@@ -37,12 +39,12 @@
         const before = structuredClone(db);
         const next = structuredClone(db);
         change(next); next.revision = db.revision + 1;
-        const raw = M.persist(localStorage, next, expectedRaw);
+        const raw = Account?.user ? Account.persist(next, expectedRaw, () => { if(message)toast(message,undo); }) : M.persist(storage, next, expectedRaw);
         db = next; expectedRaw = raw; mutation++;
         lastUndo = undo ? {data: before, mutation} : null;
         document.querySelectorAll('[data-action="undo"]').forEach(b => b.remove());
         selected = new Set([...selected].filter(id => movieById(id)));
-        if (message) toast(message, undo);
+        if (message && !Account?.user) toast(message, undo);
     }
     function refresh() {
         const y = scrollY;
@@ -184,7 +186,7 @@
         page.innerHTML = heading('ВАШ ПУТЬ В КИНО','Мой киноопыт','Нажмите на жанр или показатель, чтобы открыть записи.') + `<div class="quick-stats">${[['movies',watched().length,'разных фильмов'],['diary',db.views.length,'всего просмотров'],['quotes',db.quotes.length,'цитат'],['repeat',watched().filter(m=>M.movieViews(db,m.id).length>1).length,'фильмов пересмотрено']].map(([p,n,l])=>`<button data-action="stat-open" data-id="${p}"><strong>${n}</strong><span>${l}</span><b aria-hidden="true">↗</b></button>`).join('')}</div><div class="average-rating"><strong>★ ${average}</strong><p>Средняя оценка по ${rated.length} оценённым просмотрам.<br><span class="muted">Повторные просмотры учитываются отдельно.</span></p></div><div class="section-heading"><h2>Жанры вашей коллекции</h2></div><div class="genre-stats">${sorted.length ? sorted.map(([g,n])=>`<button class="genre-row genre-button" data-action="genre-open" data-id="${escape(g)}"><span class="genre-name">${escape(g)}</span><span class="genre-track"><span class="genre-fill" style="width:${n/sorted[0][1]*100}%"></span></span><span class="genre-count">${n}</span></button>`).join('') : '<p class="muted">Укажите жанры у фильмов, чтобы увидеть статистику.</p>'}</div>`;
     }
     function renderData() {
-        page.innerHTML = heading('ВАША КОЛЛЕКЦИЯ ПОД КОНТРОЛЕМ','Резервные копии','Данные хранятся в этом браузере. Скачивайте копию, чтобы перенести архив или восстановить его.') + `<div class="data-panels"><section class="data-panel"><h2>Сохранить архив</h2><p>Фильмы, история просмотров, цитаты, подборки и сохранённые фильтры — в одном JSON-файле.</p>${action('export','Скачать полную копию','','btn')}</section><section class="data-panel"><h2>Восстановить архив</h2><p>Поддерживаются полные копии и старые выгрузки CineDairy. Перед заменой вы увидите состав файла.</p><label for="import-file">Выберите JSON-файл</label><input id="import-file" type="file" accept=".json,application/json"><p id="import-status" role="status"></p></section></div><section class="data-panel spaced"><h2>Сохранённые фильтры</h2>${db.presets.length ? db.presets.map(p=>`<div class="saved-filter-row"><span>${escape(p.name)}</span>${action('apply-preset','Открыть',p.id)}${action('delete-preset','Удалить',p.id,'text-button danger-text')}</div>`).join('') : '<p class="muted">Сохраните удобное сочетание условий в коллекции.</p>'}</section><section class="data-panel spaced"><h2>Копия перед восстановлением</h2><p>При импорте предыдущая версия архива сохраняется отдельно, если в браузере достаточно места.</p>${action('export-previous','Скачать предыдущую копию')}</section><section class="data-panel spaced"><h2>Поиск фильмов</h2><p>Добавьте свой API-ключ Kinopoisk Unofficial для автоматического заполнения. Ключ сохраняется в этом браузере, передаётся только сервису поиска и не включается в резервные копии. Без него доступно ручное добавление.</p>${action('api-settings','Настроить автопоиск','','btn btn-outline')}</section><section class="danger-zone"><h2>Очистить архив</h2><p>Удалятся все фильмы, просмотры, цитаты, подборки и фильтры текущего архива.</p>${action('reset','Очистить данные','','btn btn-danger')}</section>`;
+        page.innerHTML = heading('ВАША КОЛЛЕКЦИЯ ПОД КОНТРОЛЕМ','Резервные копии',Account?.user?'Архив хранится в вашем аккаунте. Скачивайте резервные копии для дополнительной сохранности.':'Данные хранятся в этом браузере. Скачивайте копию, чтобы перенести архив или восстановить его.') + `<div class="data-panels"><section class="data-panel"><h2>Сохранить архив</h2><p>Фильмы, история просмотров, цитаты, подборки и сохранённые фильтры — в одном JSON-файле.</p>${action('export','Скачать полную копию','','btn')}</section><section class="data-panel"><h2>Восстановить архив</h2><p>Поддерживаются полные копии и старые выгрузки CineDairy. Перед заменой вы увидите состав файла.</p><label for="import-file">Выберите JSON-файл</label><input id="import-file" type="file" accept=".json,application/json"><p id="import-status" role="status"></p></section></div><section class="data-panel spaced"><h2>Сохранённые фильтры</h2>${db.presets.length ? db.presets.map(p=>`<div class="saved-filter-row"><span>${escape(p.name)}</span>${action('apply-preset','Открыть',p.id)}${action('delete-preset','Удалить',p.id,'text-button danger-text')}</div>`).join('') : '<p class="muted">Сохраните удобное сочетание условий в коллекции.</p>'}</section><section class="data-panel spaced"><h2>Копия перед восстановлением</h2><p>${Account?.user?'При восстановлении предыдущая версия остаётся в памяти этой вкладки до её закрытия. Скачайте её при необходимости.':'При импорте предыдущая версия архива сохраняется отдельно, если в браузере достаточно места.'}</p>${action('export-previous','Скачать предыдущую копию')}</section><section class="data-panel spaced"><h2>Поиск фильмов</h2><p>${Account?.enabled?'Автопоиск выполняется через сервер после входа в аккаунт. Ключ настраивает владелец сайта. Всегда доступно ручное добавление.':'Добавьте свой API-ключ Kinopoisk Unofficial для автоматического заполнения. Ключ хранится в этом браузере и не включается в резервные копии.'}</p>${action('api-settings','Настроить автопоиск','','btn btn-outline')}</section><section class="danger-zone"><h2>Очистить архив</h2><p>Удалятся все фильмы, просмотры, цитаты, подборки и фильтры текущего архива.</p>${action('reset','Очистить данные','','btn btn-danger')}</section>`;
     }
     function renderSearch(query) {
         const q = M.lower(query).trim();
@@ -285,7 +287,7 @@
             importing=structuredClone(candidate);
             const message=`В файле: ${candidate.movies.length} фильмов, ${candidate.views.length} просмотров, ${candidate.quotes.length} цитат, ${candidate.collections.length} подборок. Текущий архив будет заменён. Предыдущая версия сохранится в резервной копии.`;
             confirm('Восстановить архив?',message,()=>{
-                localStorage.setItem('cinedairy.before-import',JSON.stringify(db));
+                storage.setItem('cinedairy.before-import',JSON.stringify(db));
                 commit(next=>{const revision=next.revision;Object.assign(next,structuredClone(importing));next.revision=revision;},'Архив восстановлен',true);
                 filters=M.defaults();selected.clear();activeCollection='';diaryMonth='';quoteTag='';quoteSearch='';
             },'Восстановить');
@@ -295,13 +297,13 @@
     async function apiSearch(query,version) {
         const results=$('#api-results');if(!results)return;
         if(query.length<2){results.style.display='none';return;}
-        const apiKey=localStorage.getItem(API_KEY_STORAGE)||'';
-        if(!apiKey){results.style.display='block';results.innerHTML='<p class="api-message">Для автопоиска добавьте свой ключ Kinopoisk в разделе «Резервные копии и данные». Пока можно заполнить сведения вручную.</p>';return;}
+        const apiKey=Account?.enabled?'':localStorage.getItem(API_KEY_STORAGE)||'';
+        if(!apiKey&&!Account?.enabled){results.style.display='block';results.innerHTML='<p class="api-message">Для автопоиска добавьте свой ключ Kinopoisk в разделе «Резервные копии и данные». Пока можно заполнить сведения вручную.</p>';return;}
         results.style.display='block';results.innerHTML='<p class="api-message">Поиск…</p>';
         try{
-            const response=await fetch(`${KINOPOISK_API_URL}?keyword=${encodeURIComponent(query)}`,{headers:{'X-API-KEY':apiKey,'Content-Type':'application/json'}});
-            if(!response.ok)throw Error('Поиск недоступен. Заполните сведения вручную.');
-            const data=await response.json();if(version!==apiVersion||!formDialog.open)return;
+            let data;
+            if(Account?.enabled){data=await Account.request('/api/catalog?q='+encodeURIComponent(query));}
+            else {const response=await fetch(`${KINOPOISK_API_URL}?keyword=${encodeURIComponent(query)}`,{headers:{'X-API-KEY':apiKey,'Content-Type':'application/json'}});if(!response.ok)throw Error('Поиск недоступен.');data=await response.json();}if(version!==apiVersion||!formDialog.open)return;
             const rows=Array.isArray(data.items)?data.items.slice(0,8):[];
             results.replaceChildren();
             if(!rows.length){results.innerHTML='<p class="api-message">Ничего не найдено. Можно заполнить сведения вручную.</p>';return;}
@@ -313,7 +315,7 @@
         filters={...M.defaults(),...preset.filters};selected.clear();go('movies');
     }
     const actions={
-        'api-settings':()=>showForm('Настроить автопоиск',field('apiKey','Ключ Kinopoisk Unofficial','','password','autocomplete="new-password" maxlength="300"')+'<p class="field-hint">Введите новый ключ. Пустое поле отключит автопоиск и удалит сохранённый ключ.</p>',data=>{const key=data.get('apiKey').trim();if(key)localStorage.setItem(API_KEY_STORAGE,key);else localStorage.removeItem(API_KEY_STORAGE);closeForm();toast(key?'Автопоиск настроен':'Автопоиск отключён')},'Сохранить настройку'),
+        'api-settings':()=>{if(Account?.enabled){toast('В серверной версии автопоиск настраивает владелец сайта. Для поиска войдите в аккаунт.');return;}showForm('Настроить автопоиск',field('apiKey','Ключ Kinopoisk Unofficial','','password','autocomplete="new-password" maxlength="300"')+'<p class="field-hint">Введите новый ключ. Пустое поле отключит автопоиск и удалит сохранённый ключ.</p>',data=>{const key=data.get('apiKey').trim();if(key)localStorage.setItem(API_KEY_STORAGE,key);else localStorage.removeItem(API_KEY_STORAGE);closeForm();toast(key?'Автопоиск настроен':'Автопоиск отключён')},'Сохранить настройку')},
         'new-view':()=>openEntry(), 'new-planned':()=>openEntry('','',true),
         'open-movie':id=>openMovie(id), 'rewatch':id=>openEntry(id),
         'edit-view':id=>{const v=db.views.find(v=>v.id===id);if(v)openEntry(v.movieId,id)},
@@ -347,7 +349,7 @@
         'stat-open':id=>{if(id==='repeat'){filters={...M.defaults(),repeat:'yes'};go('movies')}else go(id)},
         'genre-open':genre=>{filters={...M.defaults(),genre};go('movies')},
         'export':()=>download({...db,exportedAt:new Date().toISOString()},'CineDairy-archive-'+M.today()+'.json'),
-        'export-previous':()=>{const old=localStorage.getItem('cinedairy.before-import');if(!old){toast('Предыдущей копии пока нет. Она появится после импорта.');return}download(old,'CineDairy-before-import.json')},
+        'export-previous':()=>{const old=storage.getItem('cinedairy.before-import');if(!old){toast('Предыдущей копии пока нет. Она появится после импорта.');return}download(old,'CineDairy-before-import.json')},
         'reset':()=>confirm('Очистить весь архив?','Удалятся фильмы, просмотры, цитаты, подборки и фильтры. Сначала скачайте резервную копию на странице данных.',()=>{commit(next=>{Object.assign(next,M.blank())},'Архив очищен',true);filters=M.defaults();activeCollection='';selected.clear()},'Очистить архив'),
         'undo':()=>{if(!lastUndo||lastUndo.mutation!==mutation){toast('После удаления уже были другие изменения. Отмена недоступна.');return}const before=lastUndo.data;commit(next=>{Object.assign(next,structuredClone(before))},'Действие отменено');refresh()}
     };
@@ -391,12 +393,14 @@
     formDialog.addEventListener('close',()=>{apiVersion++;clearTimeout(apiTimer)});
     drawer.addEventListener('close',()=>{for(const notice of [...$('#drawer-notifications').children])$('#notifications').append(notice)});
     window.addEventListener('hashchange',()=>{if(loaded)navigate()});
-    window.addEventListener('storage',event=>{if(event.key===M.KEY&&event.newValue!==expectedRaw)toast('Архив обновлён в другой вкладке. Обновите страницу перед изменениями.')});
-    try{
-        const initial=M.load(localStorage);db=initial.data;expectedRaw=initial.raw;loaded=true;navigate();
+    window.addEventListener('storage',event=>{if(!Account?.user&&event.key===M.KEY&&event.newValue!==expectedRaw)toast('Архив обновлён в другой вкладке. Обновите страницу перед изменениями.')});
+    async function initialize(){try{
+        storage=Account?await Account.init():localStorage;
+        const initial=M.load(storage);db=initial.data;expectedRaw=initial.raw;loaded=true;navigate();
     }catch(error){
         document.querySelectorAll('header button,header input').forEach(el=>{el.disabled=true});
         page.innerHTML=heading('ДАННЫЕ СОХРАНЕНЫ','Не удалось открыть архив','Сервис не перезаписал коллекцию. Скачайте исходные данные для восстановления.')+`<p class="form-error">${escape(error.message)}</p><button class="btn" id="rescue-export">Скачать исходные данные</button>`;
         $('#rescue-export').addEventListener('click',()=>{let raw={};try{raw={archive:localStorage.getItem(M.KEY),movies:localStorage.getItem('movies'),watchlist:localStorage.getItem('watchlist')}}catch(_){}download(raw,'CineDairy-recovery.json')});
-    }
+    }}
+    initialize();
 })();

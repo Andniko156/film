@@ -1,0 +1,68 @@
+name: Security and regression checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_DB: film_ci
+          POSTGRES_USER: film_ci
+          POSTGRES_PASSWORD: ci-only-disposable-password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U film_ci -d film_ci"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      FILM_TEST: '1'
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGDATABASE: film_ci
+      PGUSER: film_ci
+      PGPASSWORD: ci-only-disposable-password
+      PGSSLMODE: disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r server/requirements.txt
+      - run: pip install pip-audit
+      - run: pip-audit -r server/requirements.txt --no-deps --disable-pip
+      - run: python server/manage.py makemigrations --check --dry-run
+      - run: python server/manage.py test cinema --noinput
+      - run: python server/manage.py migrate --noinput
+      - run: sudo apt-get update && sudo apt-get install -y age postgresql-client-16
+      - run: bash tests/backup-smoke.sh
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - run: npm run test:ui
+      - run: npm run test:account
+        env:
+          PGHOST: ''
+      - name: Validate compose and production checks
+        run: |
+          cp .env.example .env
+          python - <<'PY'
+          import secrets
+          from pathlib import Path
+          p=Path('.env')
+          s=p.read_text()
+          for key in ['DJANGO_SECRET_KEY','DB_OWNER_PASSWORD','APP_DB_PASSWORD','MIGRATE_DB_PASSWORD','BACKUP_DB_PASSWORD']:
+              s=s.replace(key+'=\n',key+'='+secrets.token_hex(32)+'\n')
+          p.write_text(s)
+          PY
+          docker compose config --quiet
+          docker compose build app
+          docker compose run --rm --no-deps app python manage.py check --deploy --fail-level ERROR

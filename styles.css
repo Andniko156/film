@@ -478,3 +478,12 @@ button:disabled { opacity: .45; cursor: not-allowed; transform: none !important;
     .detail-management { align-items: stretch; flex-direction: column; }
     .form-dialog .form-actions { bottom: -22px; }
 }
+
+/* Account controls deliberately use the same warm cinema palette. */
+.account-button { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-banner { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding-top:14px; padding-bottom:14px; color:var(--text-secondary, #c8bdab); font-size:.86rem; }
+.account-banner span { flex:1 1 300px; }
+.account-content { display:grid; gap:16px; }
+.account-content form { display:grid; gap:12px; }
+.account-content p { line-height:1.6; overflow-wrap:anywhere; }
+@media(max-width:600px){.account-button{max-width:100%;}.header-content{flex-wrap:wrap;}.account-banner{font-size:.8rem;}}

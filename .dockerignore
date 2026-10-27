@@ -1,0 +1,12 @@
+*
+!Dockerfile
+!server/
+!server/**
+!index.html
+!styles.css
+!model.js
+!account.js
+!app.js
+server/**/__pycache__/
+server/*.sqlite3
+server/.env
