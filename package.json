@@ -1,0 +1,13 @@
+{
+  "name": "cinedairy-personal-cinema",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Personal cinema archive with viewing history, quotes and collections",
+  "scripts": {
+    "test": "node --test tests/model.test.cjs",
+    "test:ui": "node tests/ui.test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}
