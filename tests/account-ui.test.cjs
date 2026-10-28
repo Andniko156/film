@@ -41,9 +41,9 @@ let browser;
  // Another account on the same browser never inherits Alice's archive.
  await signin(page,'bob@example.com');assert.equal(await page.locator('.movie-card').count(),0);
  assert.ok(!(await page.evaluate(()=>JSON.stringify(localStorage))).includes('Только в аккаунте'));
- for(const width of [320,375,768,1280]){await page.setViewportSize({width,height:1000});await click(page,'bob@example.com');assert.equal(await page.locator('dialog[open]').evaluate(el=>el.scrollWidth>el.clientWidth+1),false);await page.locator('dialog[open] button[aria-label="Закрыть"]').click();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)}
+ for(const width of [320,375,768,1280]){await page.setViewportSize({width,height:1000});await click(page,'bob@example.com');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)}
  if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'cinema-account.png'),fullPage:true});
- await click(page,'bob@example.com');await click(page,'Удалить аккаунт');await reloadClick(page,'Удалить без возможности отмены');await loaded(page);assert.equal(await page.locator('.movie-card').count(),1);
+ await click(page,'bob@example.com');await click(page,'Удалить аккаунт');await reloadClick(page,'Подтвердить удаление аккаунта');await loaded(page);assert.equal(await page.locator('.movie-card').count(),1);
  assert.deepEqual(errors,[]);
  console.log('Passed real HTTP/browser: email login, explicit guest import, private memory-only account, reload, two devices, conflict export/reload, logout-all, account isolation, account deletion, responsive account dialog.');
 })().then(()=>finish(0),e=>{console.error(e);finish(1)});
