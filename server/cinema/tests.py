@@ -70,6 +70,44 @@ class SecurityTests(TestCase):
         self.assertFalse(self.client.session['remember_login'])
         self.assertTrue(self.client.session.get_expire_at_browser_close())
 
+    def test_confirmed_merge_preserves_both_archives_and_links_yandex(self):
+        from . import archive as archive_store
+        from .account_merge import merge_into
+        primary=create_user()
+        secondary=create_user()
+        Identity.objects.create(user=primary,provider='email',subject='owner@example.com')
+        Identity.objects.create(user=secondary,provider='yandex',subject='yandex-owner')
+        data=fixture()
+        with __import__('django.db',fromlist=['transaction']).transaction.atomic():
+            a=Archive.objects.select_for_update().get(user=primary)
+            b=Archive.objects.select_for_update().get(user=secondary)
+            archive_store.replace(a,data)
+            archive_store.replace(b,data)
+        revision=Archive.objects.get(user=primary).revision
+        counts=merge_into(primary.pk,secondary.pk,'yandex','yandex-owner',revision)
+        self.assertEqual(counts['movies'],2)
+        self.assertEqual(counts['views'],2)
+        self.assertEqual(counts['quotes'],2)
+        self.assertEqual(counts['collections'],2)
+        self.assertEqual(Identity.objects.get(provider='yandex',subject='yandex-owner').user_id,primary.pk)
+        self.assertFalse(User.objects.get(pk=secondary.pk).is_active)
+        self.assertEqual(Archive.objects.get(user=secondary).movies.count(),1)
+        merged=archive_store.read(Archive.objects.get(user=primary))
+        self.assertEqual(len({m['id'] for m in merged['movies']}),2)
+        self.assertEqual(len({v['id'] for v in merged['views']}),2)
+
+    def test_merge_rejects_secondary_with_another_credential(self):
+        from .account_merge import merge_into
+        primary=create_user()
+        secondary=create_user()
+        Identity.objects.create(user=primary,provider='email',subject='owner@example.com')
+        Identity.objects.create(user=secondary,provider='yandex',subject='yandex-owner')
+        Identity.objects.create(user=secondary,provider='email',subject='other@example.com')
+        with self.assertRaises(ValueError):
+            merge_into(primary.pk,secondary.pk,'yandex','yandex-owner',0)
+        self.assertEqual(Identity.objects.get(provider='yandex').user_id,secondary.pk)
+        self.assertTrue(User.objects.get(pk=secondary.pk).is_active)
+
     def test_password_login_reuses_email_identity(self):
         user = self.login()
         user_id = user.username
