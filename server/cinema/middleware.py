@@ -29,8 +29,11 @@ class SessionLifetime:
             now = int(time.time())
             issued = request.session.get('auth_at', 0)
             seen = request.session.get('last_seen', 0)
+            remembered = request.session.get('remember_login', False) is True
+            absolute_limit = 30 * 24 * 3600 if remembered else settings.SESSION_ABSOLUTE_SECONDS
+            idle_limit = 14 * 24 * 3600 if remembered else settings.SESSION_IDLE_SECONDS
             if (request.session.get('user_version') != request.user.session_version or
-                now - issued > settings.SESSION_ABSOLUTE_SECONDS or now - seen > settings.SESSION_IDLE_SECONDS):
+                now - issued > absolute_limit or now - seen > idle_limit):
                 logout(request)
             elif now - seen > 300:
                 request.session['last_seen'] = now
