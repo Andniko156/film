@@ -101,7 +101,37 @@
         });
         addButton(content, 'Изменить email', () => openEmail(Boolean(state.user)));
     }
-    async function yandex(link) { const data = await request('/api/auth/yandex/start','POST',{link}); location.assign(data.url); }
+    async function yandex(link) { const data = await request('/api/auth/yandex/start','POST',{link,remember:true}); location.assign(data.url); }
+    function registerDialog() {
+        const content=shell('Регистрация в CineDairy');
+        paragraph(content,'Укажите email и придумайте пароль. Затем подтвердите адрес восьмизначным кодом из письма.');
+        const form=document.createElement('form');content.append(form);
+        const email=field(form,'Email','email','register-email');email.autocomplete='email';email.maxLength=254;
+        const pass=field(form,'Пароль (от 12 символов)','password','register-password');pass.minLength=12;pass.maxLength=128;pass.autocomplete='new-password';
+        const repeat=field(form,'Повторите пароль','password','register-repeat');repeat.autocomplete='new-password';
+        const submit=document.createElement('button');submit.type='submit';submit.className='btn spaced';submit.textContent='Получить код подтверждения';form.append(submit);
+        form.addEventListener('submit',async e=>{
+            e.preventDefault();if(!form.reportValidity())return;
+            if(pass.value!==repeat.value){dialog.querySelector('[role="alert"]').textContent='Пароли не совпадают.';return;}
+            submit.disabled=true;
+            try {const value=pass.value;await request('/api/auth/email/start','POST',{email:email.value,link:false});registerCode(email.value,value);}
+            catch(err){dialog.querySelector('[role="alert"]').textContent=err.message;}
+            finally{submit.disabled=false;}
+        });
+    }
+    function registerCode(email,password) {
+        const content=shell('Подтвердите email');
+        paragraph(content,'Код отправлен на '+email+'. Он действует 10 минут. Аккаунт будет создан только после подтверждения.');
+        const form=document.createElement('form');content.append(form);
+        const code=field(form,'Восьмизначный код','text','register-code');code.pattern='[0-9]{8}';code.maxLength=8;code.inputMode='numeric';code.autocomplete='one-time-code';
+        const submit=document.createElement('button');submit.type='submit';submit.className='btn spaced';submit.textContent='Завершить регистрацию';form.append(submit);
+        form.addEventListener('submit',async e=>{
+            e.preventDefault();if(!form.reportValidity())return;submit.disabled=true;
+            try{await request('/api/auth/register/verify','POST',{email,code:code.value,password});broadcast();leave();}
+            catch(err){dialog.querySelector('[role="alert"]').textContent=err.message;}
+            finally{submit.disabled=false;}
+        });
+    }
     function passwordDialog(setup) {
         const content=shell(setup ? (state.hasPassword?'Изменить пароль':'Установить пароль') : 'Войти с паролем');
         paragraph(content,setup?'Пароль устанавливается для подтверждённого email. Требуется недавний вход.':'Используйте email, уже подтверждённый в CineDairy.');
@@ -113,13 +143,15 @@
         if(setup){pass.minLength=12;pass.maxLength=128;}
         const repeat=setup?field(form,'Повторите пароль','password','repeat-password'):null;
         if(repeat)repeat.autocomplete='new-password';
+        const remember=document.createElement('input');remember.type='checkbox';remember.id='account-remember';remember.checked=true;
+        if(!setup){const label=document.createElement('label');label.htmlFor=remember.id;label.textContent=' Запомнить меня на 30 дней';label.prepend(remember);form.append(label);}
         const submit=document.createElement('button');submit.type='submit';submit.className='btn spaced';submit.textContent=setup?'Сохранить пароль':'Войти';form.append(submit);
         form.addEventListener('submit',async e=>{
             e.preventDefault();if(!form.reportValidity())return;
             if(repeat&&pass.value!==repeat.value){dialog.querySelector('[role="alert"]').textContent='Пароли не совпадают.';return;}
             submit.disabled=true;
             try {
-                const next=await request(setup?'/api/auth/password/set':'/api/auth/password/login','POST',setup?{password:pass.value}:{email:email.value,password:pass.value});
+                const next=await request(setup?'/api/auth/password/set':'/api/auth/password/login','POST',setup?{password:pass.value}:{email:email.value,password:pass.value,remember:remember.checked});
                 if(setup){state=next;dialog.close();normalStatus();broadcast();}else{broadcast();leave();}
             }catch(err){dialog.querySelector('[role="alert"]').textContent=err.message;}
             finally{pass.value='';if(repeat)repeat.value='';submit.disabled=false;}
@@ -142,35 +174,6 @@
         addButton(content,'Скачать гостевую копию',()=>download(M.load(localStorage).data,'CineDairy-guest.json'));
         addButton(content,'Очистить гостевые данные',()=>{for(const key of [M.KEY,'movies','watchlist','cinedairy.before-import','cinedairy.kinopoisk-key'])localStorage.removeItem(key);dialog.close();if(!state.user)location.reload();});
     }
-    function accountPanel() {
-        if (saving || failed) { if(failed)openReload(); else showStatus('Подождите завершения сохранения.'); return; }
-        const content = shell(state?.user ? 'Мой аккаунт' : 'Сохраните свою историю кино');
-        if (!state) { paragraph(content,'Здесь доступен гостевой режим. Вход появится после развёртывания серверной версии сайта.'); return; }
-        if (!state.user) {
-            paragraph(content,'Войдите, чтобы хранить архив на сервере и открывать его с разных устройств. Гостевые записи переносятся только после вашего подтверждения.');
-            if(state.passwordEnabled)addButton(content,'Войти с паролем',()=>passwordDialog(false),'btn');
-            if (state.emailEnabled) addButton(content,'Войти по email',()=>openEmail(false),'btn');
-            if (state.yandexEnabled) addButton(content,'Войти через Яндекс',()=>yandex(false));
-            if (!state.emailEnabled && !state.yandexEnabled) paragraph(content,'Способы входа ещё не настроены владельцем сайта. Гостевой режим доступен.');
-            addButton(content,'Очистить гостевые данные',eraseGuest);
-        } else {
-            paragraph(content,state.user.email || 'Вход через Яндекс');
-            paragraph(content,'Архив приватный. Данные аккаунта не записываются в постоянное хранилище этого браузера.');
-            addButton(content,'Перенести гостевой архив',guestTransfer);
-            addButton(content,'Очистить гостевые данные',eraseGuest);
-            if(state.emailEnabled) addButton(content,state.user.email?'Повторно подтвердить вход':'Привязать email',()=>openEmail(true));
-            if(state.user.email)addButton(content,state.hasPassword?'Изменить пароль':'Установить пароль',()=>passwordDialog(true));
-            if(state.yandexEnabled) addButton(content,state.user.providers.includes('yandex')?'Подтвердить вход через Яндекс':'Привязать Яндекс ID',()=>yandex(true));
-            addButton(content,'Выйти',async()=>{await request('/api/auth/logout','POST',{});broadcast();leave()});
-            addButton(content,'Выйти на всех устройствах',async()=>{await request('/api/auth/logout-all','POST',{});broadcast();leave()});
-            addButton(content,'Удалить аккаунт',()=>{
-                const c=shell('Удалить аккаунт и весь архив?');
-                paragraph(c,'Все просмотры, цитаты и подборки аккаунта будут удалены. Отмена недоступна. Для удаления нужно подтверждение входа за последние 10 минут. Резервные копии сервера удаляются по сроку хранения, описанному владельцем сайта.');
-                addButton(c,'Скачать архив',()=>download(archive,'CineDairy-account.json'));
-                addButton(c,'Удалить без возможности отмены',async()=>{await request('/api/account/delete','POST',{confirm:'DELETE'});broadcast();leave()},'btn btn-danger');
-            },'text-button danger-text');
-        }
-    }
     function accountPage(container) {
         container.replaceChildren();
         const head = document.createElement('section'); head.className = 'page-heading account-page-heading';
@@ -188,7 +191,8 @@
         const identity = section('Способы входа', 'Привязанные методы должны открывать один и тот же архив.');
         if (!state?.user) {
             paragraph(identity, 'Вы используете гостевой режим. Чтобы синхронизировать фильмы между устройствами, войдите в аккаунт.');
-            if(state?.passwordEnabled)addButton(identity,'Войти с паролем',()=>passwordDialog(false),'btn');
+            if(state?.emailEnabled)addButton(identity,'Создать аккаунт',registerDialog,'btn');
+            if(state?.passwordEnabled)addButton(identity,'Войти с паролем',()=>passwordDialog(false));
             if (state?.emailEnabled) addButton(identity, 'Войти по email', () => openEmail(false), 'btn');
             if (state?.yandexEnabled) addButton(identity, 'Войти через Яндекс', () => yandex(false));
         } else {
@@ -212,10 +216,17 @@
             const security = section('Безопасность', 'Управляйте активными сессиями и удалением аккаунта.');
             addButton(security, 'Выйти', async () => { await request('/api/auth/logout','POST',{});broadcast();leave(); });
             addButton(security, 'Выйти на всех устройствах', async () => { await request('/api/auth/logout-all','POST',{});broadcast();leave(); });
-            addButton(security, 'Удалить аккаунт', () => accountPanel(), 'text-button danger-text');
+            addButton(security, 'Удалить аккаунт', () => {
+                const content = shell('Удалить аккаунт и весь архив?');
+                paragraph(content, 'Просмотры, цитаты и подборки будут удалены без возможности отмены. Подтвердите вход не более 10 минут назад.');
+                addButton(content, 'Скачать архив перед удалением', () => download(archive,'CineDairy-account.json'));
+                addButton(content, 'Подтвердить удаление аккаунта', async () => {
+                    await request('/api/account/delete','POST',{confirm:'DELETE'}); broadcast(); leave();
+                }, 'btn btn-danger');
+            }, 'text-button danger-text');
         }
     }
-    button.addEventListener('click',accountPanel);
+    button.addEventListener('click', () => { location.hash = 'account'; });
     window.addEventListener('beforeunload',e=>{if(saving||failed){e.preventDefault();e.returnValue=''}});
     async function checkSession() {
         if(!initialized||!state||document.hidden||saving)return;
@@ -230,7 +241,7 @@
         get user() { return state?.user; },
         get busy() { return saving || failed; },
         request,
-        open:accountPanel,
+        open:() => {location.hash='account';},
         renderPage:accountPage,
         async init() {
             const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);

@@ -65,8 +65,13 @@ def create_user():
     return user
 
 
-def establish(request, user):
+def establish(request, user, remember=False):
     login(request, user, backend='django.contrib.auth.backends.ModelBackend')
     now = int(time.time())
     request.session.update({'auth_at': now, 'last_seen': now, 'recent_auth': now, 'user_version': user.session_version})
+    request.session['remember_login'] = bool(remember)
+    if remember:
+        request.session.set_expiry(30 * 24 * 3600)
+    else:
+        request.session.set_expiry(0)
     audit('login', user)

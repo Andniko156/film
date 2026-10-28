@@ -22,28 +22,28 @@ let browser;
  await page.evaluate(()=>{localStorage.setItem('movies',JSON.stringify([{id:1,title:'Гостевой фильм',type:'FILM',year:2026,genre:'драма',rating:5,dateWatched:'2026-10-27',comment:'Гостевая заметка'}]));localStorage.removeItem('cinedairy.archive.v2')});await page.reload();await loaded(page);
  assert.equal(await page.locator('.movie-card').count(),1);
  const guest=await page.evaluate(()=>localStorage.getItem('cinedairy.archive.v2'));
- await signin(page,'alice@example.com');assert.equal(await page.locator('.movie-card').count(),0);
- await click(page,'alice@example.com');await click(page,'Перенести гостевой архив');await reloadClick(page,'Подтвердить перенос');await loaded(page);assert.equal(await page.locator('.movie-card').count(),1);
+ await signin(page,'alice@example.com');await page.goto(base+'/#home');await loaded(page);assert.equal(await page.locator('.movie-card').count(),0);
+ await click(page,'alice@example.com');await click(page,'Перенести гостевой архив');await reloadClick(page,'Подтвердить перенос');await page.goto(base+'/#home');await loaded(page);assert.equal(await page.locator('.movie-card').count(),1);
  assert.equal(await page.evaluate(()=>localStorage.getItem('cinedairy.archive.v2')),guest);
  // No account archive persists to localStorage, including pre-import copies.
  await page.locator('header [data-action="new-view"]').click();await page.locator('#field-title').fill('Только в аккаунте');await page.locator('#active-form button[type="submit"]').click();await page.locator('.account-banner').getByText('Личный архив · сохранён на сервере',{exact:true}).waitFor();
  assert.equal(await page.evaluate(()=>localStorage.getItem('cinedairy.archive.v2')),guest);
  await page.reload();await loaded(page);assert.equal(await page.locator('.movie-card').count(),2);
- const second=await browser.newContext(),p2=await second.newPage();await p2.goto(base);await loaded(p2);await signin(p2,'alice@example.com');assert.equal(await p2.locator('.movie-card').count(),2);
+ const second=await browser.newContext(),p2=await second.newPage();await p2.goto(base);await loaded(p2);await signin(p2,'alice@example.com');await p2.goto(base+'/#home');await loaded(p2);assert.equal(await p2.locator('.movie-card').count(),2);
  // Stale archive revision on the first device must not overwrite a new save.
  await p2.locator('header [data-action="new-view"]').click();await p2.locator('#field-title').fill('Со второго устройства');await p2.locator('#active-form button[type="submit"]').click();await p2.locator('.account-banner').getByText('Личный архив · сохранён на сервере',{exact:true}).waitFor();
  await page.locator('header [data-action="new-view"]').click();await page.locator('#field-title').fill('Конфликтующая запись');await page.locator('#active-form button[type="submit"]').click();await page.getByRole('button',{name:'Скачать несохранённую копию'}).waitFor();
  const dl=page.waitForEvent('download');await click(page,'Скачать несохранённую копию');const download=await dl;const unsaved=JSON.parse(fs.readFileSync(await download.path(),'utf8'));assert.ok(unsaved.movies.some(m=>m.title==='Конфликтующая запись'));
- await click(page,'Загрузить архив с сервера');await reloadClick(page,'Заменить данными сервера');await loaded(page);assert.equal(await page.locator('.movie-card').count(),3);
+ await click(page,'Загрузить архив с сервера');await reloadClick(page,'Заменить данными сервера');await page.goto(base+'/#home');await loaded(page);assert.equal(await page.locator('.movie-card').count(),3);
  // End all sessions and check both devices are anonymous.
- await click(page,'alice@example.com');await reloadClick(page,'Выйти на всех устройствах');await loaded(page);assert.equal(await page.locator('.movie-card').count(),1);
+ await click(page,'alice@example.com');await reloadClick(page,'Выйти на всех устройствах');await page.goto(base+'/#home');await loaded(page);assert.equal(await page.locator('.movie-card').count(),1);
  await p2.reload();await loaded(p2);assert.equal(await p2.locator('.movie-card').count(),0);
  // Another account on the same browser never inherits Alice's archive.
- await signin(page,'bob@example.com');assert.equal(await page.locator('.movie-card').count(),0);
+ await signin(page,'bob@example.com');await page.goto(base+'/#home');await loaded(page);assert.equal(await page.locator('.movie-card').count(),0);
  assert.ok(!(await page.evaluate(()=>JSON.stringify(localStorage))).includes('Только в аккаунте'));
- for(const width of [320,375,768,1280]){await page.setViewportSize({width,height:1000});await click(page,'bob@example.com');assert.equal(await page.locator('dialog[open]').evaluate(el=>el.scrollWidth>el.clientWidth+1),false);await page.locator('dialog[open] button[aria-label="Закрыть"]').click();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)}
+ for(const width of [320,375,768,1280]){await page.setViewportSize({width,height:1000});await click(page,'bob@example.com');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)}
  if(process.env.SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'cinema-account.png'),fullPage:true});
- await click(page,'bob@example.com');await click(page,'Удалить аккаунт');await reloadClick(page,'Удалить без возможности отмены');await loaded(page);assert.equal(await page.locator('.movie-card').count(),1);
+ await click(page,'bob@example.com');await click(page,'Удалить аккаунт');await reloadClick(page,'Подтвердить удаление аккаунта');await page.goto(base+'/#home');await loaded(page);assert.equal(await page.locator('.movie-card').count(),1);
  assert.deepEqual(errors,[]);
  console.log('Passed real HTTP/browser: email login, explicit guest import, private memory-only account, reload, two devices, conflict export/reload, logout-all, account isolation, account deletion, responsive account dialog.');
 })().then(()=>finish(0),e=>{console.error(e);finish(1)});

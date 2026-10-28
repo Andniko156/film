@@ -7,6 +7,7 @@ urlpatterns = [
     path('api/auth/password/login',views.password_login),
     path('api/auth/password/set',views.password_set),
     path('api/auth/email/verify',views.email_verify),
+    path('api/auth/register/verify',views.register_verify),
     path('api/auth/yandex/start',views.yandex_start),
     path('api/auth/yandex/callback',views.yandex_callback),
     path('api/auth/logout',views.sign_out),
