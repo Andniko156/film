@@ -215,7 +215,7 @@
             addButton(security, 'Удалить аккаунт', () => accountPanel(), 'text-button danger-text');
         }
     }
-    button.addEventListener('click', () => { location.hash = 'account'; });
+    button.addEventListener('click',accountPanel);
     window.addEventListener('beforeunload',e=>{if(saving||failed){e.preventDefault();e.returnValue=''}});
     async function checkSession() {
         if(!initialized||!state||document.hidden||saving)return;
