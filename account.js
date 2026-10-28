@@ -254,6 +254,7 @@
                 if(state.user){archive=M.validate(await request('/api/archive'));revision=archive.revision;raw=JSON.stringify(archive);}
                 initialized=true;normalStatus();
                 if(location.hash==='#account-error'){showStatus('Не удалось подтвердить вход через Яндекс. Попробуйте снова.');history.replaceState(null,'','#account');}
+                if(location.hash==='#account-oauth-session'){showStatus('Не удалось завершить привязку Яндекс ID: сессия браузера изменилась или истекла. Войдите заново и повторите привязку в той же вкладке.');history.replaceState(null,'','#account');}
                 if(location.hash==='#account-link-conflict'){showStatus('Этот Яндекс ID уже привязан к другому аккаунту. Архивы не объединены и не удалены. Войдите прежним способом и проверьте ID аккаунта в настройках.');history.replaceState(null,'','#account');}
                 return state.user?memory:localStorage;
             } catch(e){showStatus('Аккаунт временно недоступен. Данные не перезаписаны.');throw e;}

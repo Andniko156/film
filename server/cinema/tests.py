@@ -264,7 +264,7 @@ class SecurityTests(TestCase):
         response=self.send('/api/auth/yandex/start',{'link':False});self.assertEqual(response.status_code,200)
         self.assertIn('code_challenge_method=S256',response.json()['url'])
         flow=self.client.session['oauth']
-        self.assertEqual(self.client.get('/api/auth/yandex/callback?state=wrong&code=abc')['Location'],'/#account-error')
+        self.assertEqual(self.client.get('/api/auth/yandex/callback?state=wrong&code=abc')['Location'],'/#account-oauth-session')
         self.assertNotIn('oauth',self.client.session)
         self.send('/api/auth/yandex/start',{'link':False});flow=self.client.session['oauth']
         token=Mock();token.json.return_value={'access_token':'provider-token'}
@@ -301,11 +301,11 @@ class SecurityTests(TestCase):
     def test_catalog_proxy_does_not_expose_key_and_uses_fixed_url(self):
         self.login()
         response=Mock(); response.__enter__=Mock(return_value=response);response.__exit__=Mock(return_value=False)
-        response.iter_content.return_value=[json.dumps({'items':[{'nameRu':'Movie','secret':'not-forwarded'}]}).encode()]
+        response.iter_content.return_value=[json.dumps({'films':[{'nameRu':'Movie','secret':'not-forwarded'}]}).encode()]
         with patch('cinema.views.requests.get',return_value=response) as get:
             result=self.client.get('/api/catalog',{'q':'https://127.0.0.1/secrets'},HTTP_X_FILM_ACCOUNT=self.state['user']['id'])
             self.assertEqual(result.status_code,200)
-            self.assertEqual(get.call_args.args[0],'https://kinopoiskapiunofficial.tech/api/v2.2/films')
+            self.assertEqual(get.call_args.args[0],'https://kinopoiskapiunofficial.tech/api/v2.1/films/search-by-keyword')
             self.assertNotIn('server-test-secret',result.content.decode());self.assertNotIn('not-forwarded',result.content.decode())
 
 # Locks and optimistic concurrency must also be exercised against PostgreSQL in CI.
