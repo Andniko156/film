@@ -50,7 +50,9 @@ class SecurityTests(TestCase):
     def test_password_login_reuses_email_identity(self):
         user = self.login()
         user_id = user.username
-        self.assertEqual(self.send('/api/auth/password/set',{'password':'Strong unusual example passphrase 86420'}).status_code,200)
+        response=self.send('/api/auth/password/set',{'password':'Strong unusual example passphrase 86420'})
+        self.assertEqual(response.status_code,200)
+        self.state=response.json()
         self.send('/api/auth/logout',{})
         self.state=self.client.get('/api/session').json()
         self.assertEqual(self.send('/api/auth/password/login',{'email':'a@example.com','password':'wrong'}).status_code,401)
@@ -66,7 +68,9 @@ class SecurityTests(TestCase):
 
     def test_password_throttle_is_separate_from_email_code(self):
         self.login()
-        self.assertEqual(self.send('/api/auth/password/set',{'password':'Strong unusual example passphrase 86420'}).status_code,200)
+        response=self.send('/api/auth/password/set',{'password':'Strong unusual example passphrase 86420'})
+        self.assertEqual(response.status_code,200)
+        self.state=response.json()
         self.send('/api/auth/logout',{})
         self.state=self.client.get('/api/session').json()
         for _ in range(8):
