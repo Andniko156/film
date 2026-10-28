@@ -9,6 +9,8 @@ from urllib.parse import urlencode
 import requests
 from django.conf import settings
 from django.contrib.auth import logout
+from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import RequestDataTooBig, ValidationError
 from django.core.mail import send_mail
 from django.core.validators import validate_email
@@ -65,11 +67,56 @@ def snapshot(request):
         user = {'id': request.user.username, 'email': email, 'providers': [i.provider for i in identities]}
     return {'user': user, 'csrf': get_token(request), 'emailEnabled': settings.MAIL_ENABLED,
             'yandexEnabled': bool(settings.YANDEX_CLIENT_ID and settings.YANDEX_CLIENT_SECRET),
-            'catalogEnabled': bool(settings.KINOPOISK_API_KEY)}
+            'catalogEnabled': bool(settings.KINOPOISK_API_KEY), 'passwordEnabled': True,
+            'hasPassword': bool(request.user.is_authenticated and request.user.has_usable_password())}
 
 
 @require_GET
 def session(request):
+    return JsonResponse(snapshot(request))
+
+
+@require_POST
+def password_login(request):
+    try:
+        data=body(request)
+        if set(data)!={'email','password'}: raise ValueError()
+        email=email_value(data['email']); password=data['password']
+        if not isinstance(password,str) or not password or len(password)>1024: raise ValueError()
+    except (ValueError,KeyError): return error('Некорректный запрос.')
+    if request.user.is_authenticated: return error('Сначала выйдите из аккаунта.',409)
+    if not allow('password-ip',ip(request),20,900) or not allow('password-address',email,8,900):
+        response=error('Слишком много попыток. Повторите через 15 минут либо используйте другой способ входа.',429)
+        response['Retry-After']='900'
+        return response
+    identity=Identity.objects.select_related('user').filter(provider='email',subject=email).first()
+    user=identity.user if identity else None
+    if not user or not user.has_usable_password():
+        check_password(password,make_password('dummy-login-secret'))
+        return error('Неверный email или пароль.',401)
+    if not user.is_active or not user.check_password(password): return error('Неверный email или пароль.',401)
+    establish(request,user)
+    return JsonResponse(snapshot(request))
+
+
+@authenticated(['POST'])
+def password_set(request):
+    if not request.user.identities.filter(provider='email').exists(): return error('Привяжите подтверждённый email.',403)
+    if time.time()-request.session.get('recent_auth',0)>600: return error('Повторно подтвердите вход для изменения пароля.',403)
+    try:
+        data=body(request)
+        if set(data)!={'password'} or not isinstance(data['password'],str): raise ValueError()
+        password=data['password']
+        if not 12<=len(password)<=128: raise ValueError()
+        validate_password(password,user=request.user)
+    except (ValidationError,ValueError,KeyError): return error('Пароль должен быть надёжным и содержать 12–128 символов.',400)
+    with transaction.atomic():
+        user=User.objects.select_for_update().get(pk=request.user.pk)
+        user.set_password(password)
+        user.session_version+=1
+        user.save(update_fields=['password','session_version'])
+        establish(request,user)
+    audit('password_changed',user)
     return JsonResponse(snapshot(request))
 
 
@@ -233,7 +280,12 @@ def yandex_callback(request):
             if flow['link_user']:
                 user=User.objects.select_for_update().get(pk=flow['link_user'])
                 existing=Identity.objects.filter(user=user,provider='yandex').first()
-                if (identity and identity.user_id!=user.pk) or (existing and existing.subject!=subject): raise ValueError()
+                if identity and identity.user_id != user.pk:
+                    audit('oauth_link_conflict', user)
+                    return HttpResponseRedirect('/#account-link-conflict')
+                if existing and existing.subject != subject:
+                    audit('oauth_link_conflict', user)
+                    return HttpResponseRedirect('/#account-link-conflict')
             else: user=identity.user if identity else create_user()
             if not user.is_active: raise ValueError()
             if not identity: Identity.objects.create(user=user,provider='yandex',subject=subject)

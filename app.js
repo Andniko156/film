@@ -61,7 +61,7 @@
     }
     function navigate() {
         const name = location.hash.slice(1);
-        currentPage = ['home','movies','diary','quotes','collections','watchlist','stats','data'].includes(name) ? name : 'home';
+        currentPage = ['home','movies','diary','quotes','collections','watchlist','stats','data','account'].includes(name) ? name : 'home';
         $('#global-search').value = '';
         document.querySelectorAll('.primary-nav a').forEach(a => { const active = a.hash === '#' + currentPage; a.classList.toggle('active', active); if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
         renderPage(); window.scrollTo(0, 0);
@@ -198,6 +198,7 @@
     function renderPage() {
         if (!loaded) return;
         const query = $('#global-search').value.trim();
+        if (currentPage === 'account') return Account?.renderPage(page);
         if (query) return renderSearch(query);
         ({home:renderHome,movies:renderLibrary,diary:renderDiary,quotes:renderQuotes,collections:renderCollections,watchlist:renderWatchlist,stats:renderStats,data:renderData}[currentPage] || renderHome)();
     }

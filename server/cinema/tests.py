@@ -47,6 +47,36 @@ class SecurityTests(TestCase):
     def save(self,data=None,rev=0,method='put'):
         return self.send('/api/archive',{'archive':data or fixture(),'expectedRevision':rev},method=method)
 
+    def test_password_login_reuses_email_identity(self):
+        user = self.login()
+        user_id = user.username
+        response=self.send('/api/auth/password/set',{'password':'Strong unusual example passphrase 86420'})
+        self.assertEqual(response.status_code,200)
+        self.state=response.json()
+        self.send('/api/auth/logout',{})
+        self.state=self.client.get('/api/session').json()
+        self.assertEqual(self.send('/api/auth/password/login',{'email':'a@example.com','password':'wrong'}).status_code,401)
+        response=self.send('/api/auth/password/login',{'email':'a@example.com','password':'Strong unusual example passphrase 86420'})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json()['user']['id'],user_id)
+
+    def test_password_set_requires_linked_email(self):
+        user=self.login()
+        Identity.objects.filter(user=user,provider='email').delete()
+        self.assertEqual(self.send('/api/auth/password/set',{'password':'Strong unusual example passphrase 86420'}).status_code,403)
+
+    def test_password_throttle_is_separate_from_email_code(self):
+        self.login()
+        response=self.send('/api/auth/password/set',{'password':'Strong unusual example passphrase 86420'})
+        self.assertEqual(response.status_code,200)
+        self.state=response.json()
+        self.send('/api/auth/logout',{})
+        self.state=self.client.get('/api/session').json()
+        for _ in range(8):
+            self.send('/api/auth/password/login',{'email':'a@example.com','password':'wrong'})
+        self.assertEqual(self.send('/api/auth/password/login',{'email':'a@example.com','password':'Strong unusual example passphrase 86420'}).status_code,429)
+        self.assertEqual(self.send('/api/auth/email/start',{'email':'a@example.com','link':False}).status_code,200)
+
     def test_csrf_required_for_email_and_archive(self):
         self.assertEqual(self.client.post('/api/auth/email/start',data='{}',content_type='application/json').status_code,403)
         self.login()
