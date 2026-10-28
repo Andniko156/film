@@ -233,7 +233,12 @@ def yandex_callback(request):
             if flow['link_user']:
                 user=User.objects.select_for_update().get(pk=flow['link_user'])
                 existing=Identity.objects.filter(user=user,provider='yandex').first()
-                if (identity and identity.user_id!=user.pk) or (existing and existing.subject!=subject): raise ValueError()
+                if identity and identity.user_id != user.pk:
+                    audit('oauth_link_conflict', user)
+                    return HttpResponseRedirect('/#account-link-conflict')
+                if existing and existing.subject != subject:
+                    audit('oauth_link_conflict', user)
+                    return HttpResponseRedirect('/#account-link-conflict')
             else: user=identity.user if identity else create_user()
             if not user.is_active: raise ValueError()
             if not identity: Identity.objects.create(user=user,provider='yandex',subject=subject)
