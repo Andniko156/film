@@ -165,6 +165,51 @@ def email_start(request):
     return JsonResponse({'message':'Если адрес указан верно, письмо придёт в ближайшее время.'})
 
 
+
+@require_POST
+def register_verify(request):
+    """Create account only after proving possession of an unused email address."""
+    if request.user.is_authenticated:
+        return error('Вы уже вошли в аккаунт.',409)
+    try:
+        data=body(request)
+        if set(data)!={'email','code','password'}: raise ValueError()
+        email=email_value(data['email'])
+        code=data['code']; password=data['password']
+        if not isinstance(code,str) or len(code)!=8 or not code.isascii() or not code.isdigit(): raise ValueError()
+        if not isinstance(password,str) or not 12<=len(password)<=128: raise ValueError()
+        validate_password(password)
+    except (ValueError,KeyError,ValidationError):
+        return error('Проверьте код и надёжность пароля (12–128 символов).',400)
+    if not allow('email-verify-ip',ip(request),30,600) or not allow('email-verify-address',email,10,600):
+        response=error('Слишком много попыток. Попробуйте позже.',429)
+        response['Retry-After']='600'
+        return response
+    try:
+        with transaction.atomic():
+            challenge=EmailChallenge.objects.select_for_update().filter(email=email).first()
+            if not challenge or challenge.consumed or challenge.link_user_id or challenge.expires_at<=timezone.now() or challenge.attempts>=5:
+                return error('Код недействителен или истёк.',400)
+            challenge.attempts+=1
+            challenge.save(update_fields=['attempts'])
+            expected=digest('otp:'+email+':'+str(challenge.nonce)+':'+code)
+            if not hmac.compare_digest(expected,challenge.digest):
+                return error('Код недействителен или истёк.',400)
+            if Identity.objects.filter(provider='email',subject=email).exists():
+                return error('Этот email уже зарегистрирован. Войдите в существующий аккаунт.',409)
+            user=create_user()
+            user.set_password(password)
+            user.save(update_fields=['password'])
+            Identity.objects.create(user=user,provider='email',subject=email)
+            challenge.consumed=True
+            challenge.save(update_fields=['consumed'])
+            establish(request,user)
+    except IntegrityError:
+        return error('Этот email уже связан с аккаунтом. Войдите обычным способом.',409)
+    audit('registration_completed',user)
+    return JsonResponse(snapshot(request))
+
+
 @require_POST
 def email_verify(request):
     try:
