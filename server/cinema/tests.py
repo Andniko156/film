@@ -161,6 +161,17 @@ class SecurityTests(TestCase):
         self.assertEqual(result.status_code,409)
         self.assertEqual(Identity.objects.filter(provider='email',subject='a@example.com').count(),1)
 
+    def test_public_search_assets_have_correct_content_types(self):
+        for path, mime in [('/favicon.jpg','image/jpeg'),('/robots.txt','text/plain'),
+                           ('/sitemap.xml','application/xml')]:
+            response=self.client.get(path)
+            self.assertEqual(response.status_code,200)
+            self.assertTrue(response['Content-Type'].startswith(mime))
+
+    def test_api_remains_private_to_search_engines(self):
+        response=self.client.get('/robots.txt')
+        self.assertIn(b'Disallow: /api/',b''.join(response.streaming_content))
+
     def test_csrf_required_for_email_and_archive(self):
         self.assertEqual(self.client.post('/api/auth/email/start',data='{}',content_type='application/json').status_code,403)
         self.login()
