@@ -21,6 +21,7 @@ from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from . import archive as archive_store
+from .account_merge import counts as merge_counts, merge_into
 from .models import Archive, EmailChallenge, Identity, ImportReceipt, User
 from .security import allow, audit, authenticated, create_user, digest, establish, ip
 from .validation import validate
@@ -328,8 +329,11 @@ def yandex_callback(request):
                 user=User.objects.select_for_update().get(pk=flow['link_user'])
                 existing=Identity.objects.filter(user=user,provider='yandex').first()
                 if identity and identity.user_id != user.pk:
-                    audit('oauth_link_conflict', user)
-                    return HttpResponseRedirect('/#account-link-conflict')
+                    # OAuth confirms provider ownership; explicit session-bound consent follows.
+                    request.session['pending_merge']={'primary':user.pk,'secondary':identity.user_id,'provider':'yandex',
+                        'subject':subject,'at':int(time.time()),'session':digest(request.session.session_key or '')}
+                    audit('oauth_merge_offered', user)
+                    return HttpResponseRedirect('/#account-merge')
                 if existing and existing.subject != subject:
                     audit('oauth_link_conflict', user)
                     return HttpResponseRedirect('/#account-link-conflict')
@@ -341,6 +345,48 @@ def yandex_callback(request):
     except (requests.RequestException, ValueError, KeyError, TypeError, IntegrityError, User.DoesNotExist):
         audit('oauth_failed'); return HttpResponseRedirect('/#account-error')
     return HttpResponseRedirect('/#home')
+
+
+
+def pending_merge(request):
+    flow=request.session.get('pending_merge')
+    if (not request.user.is_authenticated or not flow or
+        flow.get('primary')!=request.user.pk or time.time()-flow.get('at',0)>600 or
+        not hmac.compare_digest(flow.get('session',''),digest(request.session.session_key or ''))):
+        return None
+    return flow
+
+
+@authenticated(['GET'])
+def merge_preview(request):
+    flow=pending_merge(request)
+    if not flow:return error('Срок подтверждения истёк. Повторите привязку Яндекс ID.',403)
+    with transaction.atomic():
+        primary=Archive.objects.select_for_update().get(user_id=flow['primary'])
+        secondary=Archive.objects.select_for_update().get(user_id=flow['secondary'])
+        identity=Identity.objects.filter(provider=flow['provider'],subject=flow['subject'],user_id=flow['secondary']).exists()
+        source=User.objects.get(pk=flow['secondary'])
+        if not identity or not source.is_active or Identity.objects.filter(user_id=source.pk).count()!=1 or source.has_usable_password():
+            return error('Второй аккаунт имеет дополнительные способы входа. Требуется отдельное подтверждение.',409)
+        return JsonResponse({'primary':merge_counts(archive_store.read(primary)),
+            'secondary':merge_counts(archive_store.read(secondary)),
+            'expectedRevision':primary.revision, 'expiresSeconds':max(0,600-(int(time.time())-flow['at']))})
+
+
+@authenticated(['POST'])
+def merge_confirm(request):
+    flow=pending_merge(request)
+    if not flow:return error('Срок подтверждения истёк. Повторите привязку Яндекс ID.',403)
+    try:
+        data=body(request)
+        if set(data)!={'confirm','expectedRevision'} or data['confirm']!='MERGE' or type(data['expectedRevision']) is not int:
+            return error('Подтвердите объединение аккаунтов.')
+        result=merge_into(flow['primary'],flow['secondary'],flow['provider'],flow['subject'],data['expectedRevision'])
+    except (ValueError,IntegrityError,KeyError,User.DoesNotExist,Archive.DoesNotExist) as e:
+        return error(str(e) if isinstance(e,ValueError) else 'Не удалось выполнить объединение.',409)
+    request.session.pop('pending_merge',None)
+    audit('oauth_merge_completed',request.user)
+    return JsonResponse({'ok':True,'counts':result})
 
 
 @authenticated(['GET','PUT','POST'])

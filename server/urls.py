@@ -10,6 +10,8 @@ urlpatterns = [
     path('api/auth/register/verify',views.register_verify),
     path('api/auth/yandex/start',views.yandex_start),
     path('api/auth/yandex/callback',views.yandex_callback),
+    path('api/account/merge/preview',views.merge_preview),
+    path('api/account/merge/confirm',views.merge_confirm),
     path('api/auth/logout',views.sign_out),
     path('api/auth/logout-all',views.sign_out_all),
     path('api/account/delete',views.delete_account),

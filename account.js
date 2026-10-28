@@ -3,7 +3,7 @@
     'use strict';
     const M = window.CinemaModel;
     let state = null, raw = null, saving = false, failed = false, revision = 0, archive = null;
-    let beforeImport = null, initialized = false;
+    let beforeImport = null, initialized = false, mergeOfferPending = false;
     let channel;
     const memory = {
         getItem(key) { return key === M.KEY ? raw : key === 'cinedairy.before-import' ? beforeImport : null; },
@@ -206,6 +206,19 @@
             if (providers.includes('yandex')) paragraph(identity, 'Вход через Яндекс уже связан с этим аккаунтом.');
             paragraph(identity, 'Если при входе другим способом виден пустой архив — сравните ID аккаунта. Не удаляйте записи: это может быть другой аккаунт.');
         }
+        if (state?.user && mergeOfferPending) {
+            const merge = section('Объединение аккаунтов', 'Яндекс ID уже связан с другим вашим киноархивом.');
+            paragraph(merge, 'Перед объединением проверьте количество записей. Перенос выполняется только после подтверждения. Ничего не заменяется автоматически.');
+            const details = paragraph(merge, 'Получение сведений об архивах…');
+            request('/api/account/merge/preview').then(info => {
+                details.textContent = 'Основной аккаунт: '+info.primary.movies+' фильмов, '+info.primary.views+' просмотров, '+info.primary.quotes+' цитат. Аккаунт Яндекса: '+info.secondary.movies+' фильмов, '+info.secondary.views+' просмотров, '+info.secondary.quotes+' цитат.';
+                addButton(merge, 'Подтвердить объединение архивов', async () => {
+                    if (!window.confirm('Объединить два аккаунта? Записи обоих архивов сохранятся. Операция требует повторного входа при истечении срока подтверждения.')) return;
+                    await request('/api/account/merge/confirm','POST',{confirm:'MERGE',expectedRevision:info.expectedRevision});
+                    mergeOfferPending=false;broadcast();location.reload();
+                }, 'btn');
+            }).catch(err => {details.textContent = err.message;});
+        }
         const records = section('Личный архив', 'Экспортируйте данные перед любыми изменениями способов входа.');
         if (state?.user) {
             if (archive) addButton(records, 'Скачать архив JSON', () => download(archive, 'CineDairy-account.json'));
@@ -254,6 +267,7 @@
                 if(state.user){archive=M.validate(await request('/api/archive'));revision=archive.revision;raw=JSON.stringify(archive);}
                 initialized=true;normalStatus();
                 if(location.hash==='#account-error'){showStatus('Не удалось подтвердить вход через Яндекс. Попробуйте снова.');history.replaceState(null,'','#account');}
+                if(location.hash==='#account-merge'){mergeOfferPending=true;history.replaceState(null,'','#account');}
                 if(location.hash==='#account-link-conflict'){showStatus('Этот Яндекс ID уже привязан к другому аккаунту. Архивы не объединены и не удалены. Войдите прежним способом и проверьте ID аккаунта в настройках.');history.replaceState(null,'','#account');}
                 return state.user?memory:localStorage;
             } catch(e){showStatus('Аккаунт временно недоступен. Данные не перезаписаны.');throw e;}
