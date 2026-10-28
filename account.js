@@ -102,6 +102,30 @@
         addButton(content, 'Изменить email', () => openEmail(Boolean(state.user)));
     }
     async function yandex(link) { const data = await request('/api/auth/yandex/start','POST',{link}); location.assign(data.url); }
+    function passwordDialog(setup) {
+        const content=shell(setup ? (state.hasPassword?'Изменить пароль':'Установить пароль') : 'Войти с паролем');
+        paragraph(content,setup?'Пароль устанавливается для подтверждённого email. Требуется недавний вход.':'Используйте email, уже подтверждённый в CineDairy.');
+        const form=document.createElement('form');content.append(form);
+        const email=setup?null:field(form,'Email','email','login-email');
+        if(email) email.autocomplete='username';
+        const pass=field(form,setup?'Новый пароль':'Пароль','password','login-password');
+        pass.autocomplete=setup?'new-password':'current-password';
+        if(setup){pass.minLength=12;pass.maxLength=128;}
+        const repeat=setup?field(form,'Повторите пароль','password','repeat-password'):null;
+        if(repeat)repeat.autocomplete='new-password';
+        const submit=document.createElement('button');submit.type='submit';submit.className='btn spaced';submit.textContent=setup?'Сохранить пароль':'Войти';form.append(submit);
+        form.addEventListener('submit',async e=>{
+            e.preventDefault();if(!form.reportValidity())return;
+            if(repeat&&pass.value!==repeat.value){dialog.querySelector('[role="alert"]').textContent='Пароли не совпадают.';return;}
+            submit.disabled=true;
+            try {
+                const next=await request(setup?'/api/auth/password/set':'/api/auth/password/login','POST',setup?{password:pass.value}:{email:email.value,password:pass.value});
+                if(setup){state=next;dialog.close();normalStatus();broadcast();}else{broadcast();leave();}
+            }catch(err){dialog.querySelector('[role="alert"]').textContent=err.message;}
+            finally{pass.value='';if(repeat)repeat.value='';submit.disabled=false;}
+        });
+        if(!setup&&state.emailEnabled)addButton(content,'Войти по коду из письма',()=>openEmail(false));
+    }
     function guestTransfer() {
         if (saving || failed) throw Error('Сначала завершите сохранение или разрешите конфликт.');
         const guest = M.load(localStorage).data;
@@ -124,6 +148,7 @@
         if (!state) { paragraph(content,'Здесь доступен гостевой режим. Вход появится после развёртывания серверной версии сайта.'); return; }
         if (!state.user) {
             paragraph(content,'Войдите, чтобы хранить архив на сервере и открывать его с разных устройств. Гостевые записи переносятся только после вашего подтверждения.');
+            if(state.passwordEnabled)addButton(content,'Войти с паролем',()=>passwordDialog(false),'btn');
             if (state.emailEnabled) addButton(content,'Войти по email',()=>openEmail(false),'btn');
             if (state.yandexEnabled) addButton(content,'Войти через Яндекс',()=>yandex(false));
             if (!state.emailEnabled && !state.yandexEnabled) paragraph(content,'Способы входа ещё не настроены владельцем сайта. Гостевой режим доступен.');
@@ -134,6 +159,7 @@
             addButton(content,'Перенести гостевой архив',guestTransfer);
             addButton(content,'Очистить гостевые данные',eraseGuest);
             if(state.emailEnabled) addButton(content,state.user.email?'Повторно подтвердить вход':'Привязать email',()=>openEmail(true));
+            if(state.user.email)addButton(content,state.hasPassword?'Изменить пароль':'Установить пароль',()=>passwordDialog(true));
             if(state.yandexEnabled) addButton(content,state.user.providers.includes('yandex')?'Подтвердить вход через Яндекс':'Привязать Яндекс ID',()=>yandex(true));
             addButton(content,'Выйти',async()=>{await request('/api/auth/logout','POST',{});broadcast();leave()});
             addButton(content,'Выйти на всех устройствах',async()=>{await request('/api/auth/logout-all','POST',{});broadcast();leave()});
@@ -162,6 +188,7 @@
         const identity = section('Способы входа', 'Привязанные методы должны открывать один и тот же архив.');
         if (!state?.user) {
             paragraph(identity, 'Вы используете гостевой режим. Чтобы синхронизировать фильмы между устройствами, войдите в аккаунт.');
+            if(state?.passwordEnabled)addButton(identity,'Войти с паролем',()=>passwordDialog(false),'btn');
             if (state?.emailEnabled) addButton(identity, 'Войти по email', () => openEmail(false), 'btn');
             if (state?.yandexEnabled) addButton(identity, 'Войти через Яндекс', () => yandex(false));
         } else {
@@ -170,6 +197,7 @@
             paragraph(identity, 'Email: ' + (providers.includes('email') ? state.user.email : 'не привязан'));
             paragraph(identity, 'Яндекс ID: ' + (providers.includes('yandex') ? 'привязан' : 'не привязан'));
             if (state.emailEnabled) addButton(identity, providers.includes('email') ? 'Подтвердить email повторно' : 'Привязать email', () => openEmail(true));
+            if(providers.includes('email'))addButton(identity,state.hasPassword?'Изменить пароль':'Установить пароль',()=>passwordDialog(true));
             if (state.yandexEnabled && !providers.includes('yandex')) addButton(identity, 'Привязать Яндекс ID', () => yandex(true));
             if (providers.includes('yandex')) paragraph(identity, 'Вход через Яндекс уже связан с этим аккаунтом.');
             paragraph(identity, 'Если при входе другим способом виден пустой архив — сравните ID аккаунта. Не удаляйте записи: это может быть другой аккаунт.');
