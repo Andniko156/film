@@ -110,6 +110,8 @@ class SecurityTests(TestCase):
         self.assertIn('email',result.json()['user']['providers'])
         user=Identity.objects.get(provider='email',subject='new@example.com').user
         self.assertTrue(user.check_password('Long unique passphrase 98766'))
+        self.send('/api/auth/logout',{})
+        self.state=self.client.get('/api/session').json()
         self.assertEqual(self.send('/api/auth/register/verify',{'email':'new@example.com','code':self.code(),'password':'Long unique passphrase 98766'}).status_code,409)
 
     def test_registration_does_not_take_over_existing_email(self):
