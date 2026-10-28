@@ -102,6 +102,36 @@
         addButton(content, 'Изменить email', () => openEmail(Boolean(state.user)));
     }
     async function yandex(link) { const data = await request('/api/auth/yandex/start','POST',{link}); location.assign(data.url); }
+    function registerDialog() {
+        const content=shell('Регистрация в CineDairy');
+        paragraph(content,'Укажите email и придумайте пароль. Затем подтвердите адрес восьмизначным кодом из письма.');
+        const form=document.createElement('form');content.append(form);
+        const email=field(form,'Email','email','register-email');email.autocomplete='email';email.maxLength=254;
+        const pass=field(form,'Пароль (от 12 символов)','password','register-password');pass.minLength=12;pass.maxLength=128;pass.autocomplete='new-password';
+        const repeat=field(form,'Повторите пароль','password','register-repeat');repeat.autocomplete='new-password';
+        const submit=document.createElement('button');submit.type='submit';submit.className='btn spaced';submit.textContent='Получить код подтверждения';form.append(submit);
+        form.addEventListener('submit',async e=>{
+            e.preventDefault();if(!form.reportValidity())return;
+            if(pass.value!==repeat.value){dialog.querySelector('[role="alert"]').textContent='Пароли не совпадают.';return;}
+            submit.disabled=true;
+            try {const value=pass.value;await request('/api/auth/email/start','POST',{email:email.value,link:false});registerCode(email.value,value);}
+            catch(err){dialog.querySelector('[role="alert"]').textContent=err.message;}
+            finally{submit.disabled=false;}
+        });
+    }
+    function registerCode(email,password) {
+        const content=shell('Подтвердите email');
+        paragraph(content,'Код отправлен на '+email+'. Он действует 10 минут. Аккаунт будет создан только после подтверждения.');
+        const form=document.createElement('form');content.append(form);
+        const code=field(form,'Восьмизначный код','text','register-code');code.pattern='[0-9]{8}';code.maxLength=8;code.inputMode='numeric';code.autocomplete='one-time-code';
+        const submit=document.createElement('button');submit.type='submit';submit.className='btn spaced';submit.textContent='Завершить регистрацию';form.append(submit);
+        form.addEventListener('submit',async e=>{
+            e.preventDefault();if(!form.reportValidity())return;submit.disabled=true;
+            try{await request('/api/auth/register/verify','POST',{email,code:code.value,password});broadcast();leave();}
+            catch(err){dialog.querySelector('[role="alert"]').textContent=err.message;}
+            finally{submit.disabled=false;}
+        });
+    }
     function passwordDialog(setup) {
         const content=shell(setup ? (state.hasPassword?'Изменить пароль':'Установить пароль') : 'Войти с паролем');
         paragraph(content,setup?'Пароль устанавливается для подтверждённого email. Требуется недавний вход.':'Используйте email, уже подтверждённый в CineDairy.');
@@ -159,7 +189,8 @@
         const identity = section('Способы входа', 'Привязанные методы должны открывать один и тот же архив.');
         if (!state?.user) {
             paragraph(identity, 'Вы используете гостевой режим. Чтобы синхронизировать фильмы между устройствами, войдите в аккаунт.');
-            if(state?.passwordEnabled)addButton(identity,'Войти с паролем',()=>passwordDialog(false),'btn');
+            if(state?.emailEnabled)addButton(identity,'Создать аккаунт',registerDialog,'btn');
+            if(state?.passwordEnabled)addButton(identity,'Войти с паролем',()=>passwordDialog(false));
             if (state?.emailEnabled) addButton(identity, 'Войти по email', () => openEmail(false), 'btn');
             if (state?.yandexEnabled) addButton(identity, 'Войти через Яндекс', () => yandex(false));
         } else {
