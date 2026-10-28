@@ -307,9 +307,9 @@ def yandex_start(request):
 def yandex_callback(request):
     flow=request.session.pop('oauth',None)
     if not flow or time.time()-flow['at']>600 or not hmac.compare_digest(request.GET.get('state',''),flow['state']):
-        return HttpResponseRedirect('/#account-error')
+        return HttpResponseRedirect('/#account-oauth-session')
     if bool(flow['link_user']) != request.user.is_authenticated or (flow['link_user'] and flow['link_user']!=request.user.pk):
-        return HttpResponseRedirect('/#account-error')
+        return HttpResponseRedirect('/#account-oauth-session')
     code=request.GET.get('code','')
     if not code or len(code)>2048: return HttpResponseRedirect('/#account-error')
     try:
@@ -381,14 +381,14 @@ def catalog(request):
     if not 2<=len(query)<=150: return error('Введите от 2 до 150 символов.')
     if not allow('catalog',str(request.user.pk),30,60): return error('Слишком частый поиск.',429)
     try:
-        with requests.get('https://kinopoiskapiunofficial.tech/api/v2.2/films',params={'keyword':query},headers={'X-API-KEY':settings.KINOPOISK_API_KEY},timeout=8,allow_redirects=False,stream=True) as response:
+        with requests.get('https://kinopoiskapiunofficial.tech/api/v2.1/films/search-by-keyword',params={'keyword':query},headers={'X-API-KEY':settings.KINOPOISK_API_KEY},timeout=8,allow_redirects=False,stream=True) as response:
             response.raise_for_status(); chunks=[]; size=0
             for chunk in response.iter_content(16384):
                 size+=len(chunk)
                 if size>1024*1024: raise ValueError()
                 chunks.append(chunk)
             raw=json.loads(b''.join(chunks))
-        rows=raw.get('items',[])
+        rows=raw.get('films',[])
         if not isinstance(rows,list): raise ValueError()
         items=[]
         for item in rows[:8]:
