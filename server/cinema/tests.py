@@ -61,9 +61,8 @@ class SecurityTests(TestCase):
         self.assertEqual(response.json()['user']['id'],user_id)
 
     def test_password_set_requires_linked_email(self):
-        user=create_user()
-        self.client.force_login(user)
-        self.state=self.client.get('/api/session').json()
+        user=self.login()
+        Identity.objects.filter(user=user,provider='email').delete()
         self.assertEqual(self.send('/api/auth/password/set',{'password':'Strong unusual example passphrase 86420'}).status_code,403)
 
     def test_password_throttle_is_separate_from_email_code(self):
