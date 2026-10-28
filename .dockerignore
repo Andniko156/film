@@ -7,6 +7,9 @@
 !model.js
 !account.js
 !app.js
+!favicon.jpg
+!robots.txt
+!sitemap.xml
 server/**/__pycache__/
 server/*.sqlite3
 server/.env
