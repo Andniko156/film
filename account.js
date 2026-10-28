@@ -101,7 +101,7 @@
         });
         addButton(content, 'Изменить email', () => openEmail(Boolean(state.user)));
     }
-    async function yandex(link) { const data = await request('/api/auth/yandex/start','POST',{link}); location.assign(data.url); }
+    async function yandex(link) { const data = await request('/api/auth/yandex/start','POST',{link,remember:true}); location.assign(data.url); }
     function registerDialog() {
         const content=shell('Регистрация в CineDairy');
         paragraph(content,'Укажите email и придумайте пароль. Затем подтвердите адрес восьмизначным кодом из письма.');
@@ -143,13 +143,15 @@
         if(setup){pass.minLength=12;pass.maxLength=128;}
         const repeat=setup?field(form,'Повторите пароль','password','repeat-password'):null;
         if(repeat)repeat.autocomplete='new-password';
+        const remember=document.createElement('input');remember.type='checkbox';remember.id='account-remember';remember.checked=true;
+        if(!setup){const label=document.createElement('label');label.htmlFor=remember.id;label.textContent=' Запомнить меня на 30 дней';label.prepend(remember);form.append(label);}
         const submit=document.createElement('button');submit.type='submit';submit.className='btn spaced';submit.textContent=setup?'Сохранить пароль':'Войти';form.append(submit);
         form.addEventListener('submit',async e=>{
             e.preventDefault();if(!form.reportValidity())return;
             if(repeat&&pass.value!==repeat.value){dialog.querySelector('[role="alert"]').textContent='Пароли не совпадают.';return;}
             submit.disabled=true;
             try {
-                const next=await request(setup?'/api/auth/password/set':'/api/auth/password/login','POST',setup?{password:pass.value}:{email:email.value,password:pass.value});
+                const next=await request(setup?'/api/auth/password/set':'/api/auth/password/login','POST',setup?{password:pass.value}:{email:email.value,password:pass.value,remember:remember.checked});
                 if(setup){state=next;dialog.close();normalStatus();broadcast();}else{broadcast();leave();}
             }catch(err){dialog.querySelector('[role="alert"]').textContent=err.message;}
             finally{pass.value='';if(repeat)repeat.value='';submit.disabled=false;}
