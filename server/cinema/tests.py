@@ -47,6 +47,29 @@ class SecurityTests(TestCase):
     def save(self,data=None,rev=0,method='put'):
         return self.send('/api/archive',{'archive':data or fixture(),'expectedRevision':rev},method=method)
 
+    def test_password_remember_me_sets_expiring_cookie(self):
+        self.login()
+        response=self.send('/api/auth/password/set',{'password':'Strong unusual example passphrase 86420'})
+        self.state=response.json()
+        self.send('/api/auth/logout',{})
+        self.state=self.client.get('/api/session').json()
+        response=self.send('/api/auth/password/login',{'email':'a@example.com','password':'Strong unusual example passphrase 86420','remember':True})
+        self.assertEqual(response.status_code,200)
+        self.assertTrue(self.client.session['remember_login'])
+        self.assertFalse(self.client.session.get_expire_at_browser_close())
+        self.assertGreater(self.client.session.get_expiry_age(), 20*24*3600)
+
+    def test_password_login_without_remember_expires_with_browser(self):
+        self.login()
+        response=self.send('/api/auth/password/set',{'password':'Strong unusual example passphrase 86420'})
+        self.state=response.json()
+        self.send('/api/auth/logout',{})
+        self.state=self.client.get('/api/session').json()
+        response=self.send('/api/auth/password/login',{'email':'a@example.com','password':'Strong unusual example passphrase 86420','remember':False})
+        self.assertEqual(response.status_code,200)
+        self.assertFalse(self.client.session['remember_login'])
+        self.assertTrue(self.client.session.get_expire_at_browser_close())
+
     def test_password_login_reuses_email_identity(self):
         user = self.login()
         user_id = user.username
