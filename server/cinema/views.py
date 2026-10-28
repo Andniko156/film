@@ -446,7 +446,7 @@ def catalog(request):
 
 @require_GET
 def asset(request,name='index.html'):
-    if name not in ('index.html','styles.css','model.js','account.js','app.js','favicon.jpg','robots.txt','sitemap.xml'): return error('Не найдено.',404)
+    if name not in ('index.html','styles.css','model.js','account.js','app.js','favicon.jpg','robots.txt','sitemap.xml','google027975498f38715b.html'): return error('Не найдено.',404)
     mime= ('text/html' if name.endswith('.html') else 'text/css' if name.endswith('.css') else
           'image/jpeg' if name.endswith('.jpg') else 'text/plain' if name.endswith('.txt') else
           'application/xml' if name.endswith('.xml') else 'application/javascript')
