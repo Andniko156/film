@@ -142,35 +142,6 @@
         addButton(content,'Скачать гостевую копию',()=>download(M.load(localStorage).data,'CineDairy-guest.json'));
         addButton(content,'Очистить гостевые данные',()=>{for(const key of [M.KEY,'movies','watchlist','cinedairy.before-import','cinedairy.kinopoisk-key'])localStorage.removeItem(key);dialog.close();if(!state.user)location.reload();});
     }
-    function accountPanel() {
-        if (saving || failed) { if(failed)openReload(); else showStatus('Подождите завершения сохранения.'); return; }
-        const content = shell(state?.user ? 'Мой аккаунт' : 'Сохраните свою историю кино');
-        if (!state) { paragraph(content,'Здесь доступен гостевой режим. Вход появится после развёртывания серверной версии сайта.'); return; }
-        if (!state.user) {
-            paragraph(content,'Войдите, чтобы хранить архив на сервере и открывать его с разных устройств. Гостевые записи переносятся только после вашего подтверждения.');
-            if(state.passwordEnabled)addButton(content,'Войти с паролем',()=>passwordDialog(false),'btn');
-            if (state.emailEnabled) addButton(content,'Войти по email',()=>openEmail(false),'btn');
-            if (state.yandexEnabled) addButton(content,'Войти через Яндекс',()=>yandex(false));
-            if (!state.emailEnabled && !state.yandexEnabled) paragraph(content,'Способы входа ещё не настроены владельцем сайта. Гостевой режим доступен.');
-            addButton(content,'Очистить гостевые данные',eraseGuest);
-        } else {
-            paragraph(content,state.user.email || 'Вход через Яндекс');
-            paragraph(content,'Архив приватный. Данные аккаунта не записываются в постоянное хранилище этого браузера.');
-            addButton(content,'Перенести гостевой архив',guestTransfer);
-            addButton(content,'Очистить гостевые данные',eraseGuest);
-            if(state.emailEnabled) addButton(content,state.user.email?'Повторно подтвердить вход':'Привязать email',()=>openEmail(true));
-            if(state.user.email)addButton(content,state.hasPassword?'Изменить пароль':'Установить пароль',()=>passwordDialog(true));
-            if(state.yandexEnabled) addButton(content,state.user.providers.includes('yandex')?'Подтвердить вход через Яндекс':'Привязать Яндекс ID',()=>yandex(true));
-            addButton(content,'Выйти',async()=>{await request('/api/auth/logout','POST',{});broadcast();leave()});
-            addButton(content,'Выйти на всех устройствах',async()=>{await request('/api/auth/logout-all','POST',{});broadcast();leave()});
-            addButton(content,'Удалить аккаунт',()=>{
-                const c=shell('Удалить аккаунт и весь архив?');
-                paragraph(c,'Все просмотры, цитаты и подборки аккаунта будут удалены. Отмена недоступна. Для удаления нужно подтверждение входа за последние 10 минут. Резервные копии сервера удаляются по сроку хранения, описанному владельцем сайта.');
-                addButton(c,'Скачать архив',()=>download(archive,'CineDairy-account.json'));
-                addButton(c,'Удалить без возможности отмены',async()=>{await request('/api/account/delete','POST',{confirm:'DELETE'});broadcast();leave()},'btn btn-danger');
-            },'text-button danger-text');
-        }
-    }
     function accountPage(container) {
         container.replaceChildren();
         const head = document.createElement('section'); head.className = 'page-heading account-page-heading';
@@ -212,10 +183,17 @@
             const security = section('Безопасность', 'Управляйте активными сессиями и удалением аккаунта.');
             addButton(security, 'Выйти', async () => { await request('/api/auth/logout','POST',{});broadcast();leave(); });
             addButton(security, 'Выйти на всех устройствах', async () => { await request('/api/auth/logout-all','POST',{});broadcast();leave(); });
-            addButton(security, 'Удалить аккаунт', () => accountPanel(), 'text-button danger-text');
+            addButton(security, 'Удалить аккаунт', () => {
+                const content = shell('Удалить аккаунт и весь архив?');
+                paragraph(content, 'Просмотры, цитаты и подборки будут удалены без возможности отмены. Подтвердите вход не более 10 минут назад.');
+                addButton(content, 'Скачать архив перед удалением', () => download(archive,'CineDairy-account.json'));
+                addButton(content, 'Подтвердить удаление аккаунта', async () => {
+                    await request('/api/account/delete','POST',{confirm:'DELETE'}); broadcast(); leave();
+                }, 'btn btn-danger');
+            }, 'text-button danger-text');
         }
     }
-    button.addEventListener('click',accountPanel);
+    button.addEventListener('click', () => { location.hash = 'account'; });
     window.addEventListener('beforeunload',e=>{if(saving||failed){e.preventDefault();e.returnValue=''}});
     async function checkSession() {
         if(!initialized||!state||document.hidden||saving)return;
@@ -230,7 +208,7 @@
         get user() { return state?.user; },
         get busy() { return saving || failed; },
         request,
-        open:accountPanel,
+        open:() => {location.hash='account';},
         renderPage:accountPage,
         async init() {
             const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
