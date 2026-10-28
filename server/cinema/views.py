@@ -117,7 +117,7 @@ def password_set(request):
         user.set_password(password)
         user.session_version+=1
         user.save(update_fields=['password','session_version'])
-        establish(request,user)
+        establish(request,user,remember=request.session.get('remember_login',False))
     audit('password_changed',user)
     return JsonResponse(snapshot(request))
 
