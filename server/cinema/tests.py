@@ -77,6 +77,27 @@ class SecurityTests(TestCase):
         self.assertEqual(self.send('/api/auth/password/login',{'email':'a@example.com','password':'Strong unusual example passphrase 86420'}).status_code,429)
         self.assertEqual(self.send('/api/auth/email/start',{'email':'a@example.com','link':False}).status_code,200)
 
+    def test_registration_requires_email_code_before_account_creation(self):
+        start=self.start('new@example.com')
+        self.assertEqual(start.status_code,200)
+        self.assertFalse(Identity.objects.filter(provider='email',subject='new@example.com').exists())
+        self.assertEqual(self.send('/api/auth/register/verify',{'email':'new@example.com','code':'00000000','password':'Long unique passphrase 98766'}).status_code,400)
+        result=self.send('/api/auth/register/verify',{'email':'new@example.com','code':self.code(),'password':'Long unique passphrase 98766'})
+        self.assertEqual(result.status_code,200)
+        self.assertIn('email',result.json()['user']['providers'])
+        user=Identity.objects.get(provider='email',subject='new@example.com').user
+        self.assertTrue(user.check_password('Long unique passphrase 98766'))
+        self.assertEqual(self.send('/api/auth/register/verify',{'email':'new@example.com','code':self.code(),'password':'Long unique passphrase 98766'}).status_code,409)
+
+    def test_registration_does_not_take_over_existing_email(self):
+        self.login()
+        self.send('/api/auth/logout',{})
+        self.state=self.client.get('/api/session').json()
+        self.assertEqual(self.start('a@example.com').status_code,200)
+        result=self.send('/api/auth/register/verify',{'email':'a@example.com','code':self.code(),'password':'Long unique passphrase 98766'})
+        self.assertEqual(result.status_code,409)
+        self.assertEqual(Identity.objects.filter(provider='email',subject='a@example.com').count(),1)
+
     def test_csrf_required_for_email_and_archive(self):
         self.assertEqual(self.client.post('/api/auth/email/start',data='{}',content_type='application/json').status_code,403)
         self.login()
