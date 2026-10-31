@@ -41,12 +41,15 @@ const legacy=[
  await click('open-movie',first);
  assert.equal(await page.locator('#detail-title').textContent(),'Прибытие');
  await click('rewatch',first,page.locator('#movie-dialog'));
+ assert.equal(await page.locator('#active-form details').last().getAttribute('open'),null);
+ await page.locator('#active-form details').last().locator('summary').click();
  await page.locator('#field-note').fill('Несохранённое впечатление');await closeForm();
  assert.equal((await getDB()).views.length,3);
  await click('rewatch',first,page.locator('#movie-dialog'));
  await page.locator('#field-date').fill('2026-10-25');await page.locator('#field-rating').selectOption('4');
+ await page.locator('#active-form details').last().locator('summary').click();
  await page.locator('#field-company').fill('С друзьями');await page.locator('#field-mood').fill('Восторг');await page.locator('#field-note').fill('Повторный просмотр открыл новые детали');await submit();
- db=await getDB();assert.equal(db.views.length,4);assert.equal(model.movieViews(db,first).length,2);assert.equal(model.movieViews(db,first)[1].note,legacy[0].comment);
+ db=await getDB();assert.equal(db.views.length,4);assert.equal(model.movieViews(db,first).length,2);assert.equal(db.views[0].company,'С друзьями');assert.equal(db.views[0].mood,'Восторг');assert.equal(model.movieViews(db,first)[1].note,legacy[0].comment);
  await click('new-quote',first,page.locator('#movie-dialog'));
  await page.locator('#field-text').fill('Секретная фраза <img src=x onerror=alert(1)>');await page.locator('#field-character').fill('Луиза');await page.locator('#field-time').fill('01:24:10');await page.locator('#field-tags').fill('о выборе, время');await page.locator('[name="spoiler"]').check();await submit();
  await click('detail-tab','quotes',page.locator('#movie-dialog'));

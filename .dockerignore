@@ -4,6 +4,8 @@
 !server/**
 !index.html
 !styles.css
+!quote-card.css
+!quote-card.js
 !model.js
 !account.js
 !app.js

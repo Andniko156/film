@@ -18,6 +18,11 @@
     let selected = new Set(), bulkIds = [], lastUndo = null, mutation = 0, searchTimer, apiTimer, apiVersion = 0;
     let formSubmit = null, importing = null;
     const revealedQuotes = new Set();
+    let homeMovieId = '', homeQuoteId = '';
+    function pickHomeItem(items, previous = '') {
+        const candidates = items.length > 1 ? items.filter(item => item.id !== previous) : items;
+        return candidates[Math.floor(Math.random() * candidates.length)] || null;
+    }
     const movieById = id => db.movies.find(m => m.id === id);
     const quoteById = id => db.quotes.find(q => q.id === id);
     const quoteCount = id => db.quotes.filter(q => q.movieId === id).length;
@@ -88,18 +93,23 @@
         return `<article class="quote-card"><div class="quote-source"><button class="text-button" data-action="open-movie" data-id="${escape(movie.id)}">${escape(movie.title)}</button>${quote.spoiler ? '<span class="badge">Спойлер</span>' : ''}</div>
         ${hidden ? `<div class="spoiler-cover"><p>Цитата скрыта, чтобы сохранить интригу.</p>${action('reveal-quote','Показать цитату',quote.id)}</div>` : `<blockquote>${escape(quote.text)}</blockquote><p class="small muted">${escape([quote.character,quote.time].filter(Boolean).join(' · '))}</p>${quote.note && !compact ? `<p class="view-note">${escape(quote.note)}</p>` : ''}`}
         <div class="tag-row">${quote.tags.map(t => action('quote-tag',escape(t),t,'tag')).join('')}</div>
-        <div class="inline-actions">${!hidden ? action('copy-quote','Копировать',quote.id,'text-button') : ''}${!compact ? action('edit-quote','Изменить',quote.id,'text-button') + action('delete-quote','Удалить',quote.id,'text-button danger-text') : ''}</div></article>`;
+        <div class="inline-actions">${!hidden ? action('copy-quote','Копировать',quote.id,'text-button') + action('poster-quote','Создать карточку',quote.id,'text-button') : ''}${!compact ? action('edit-quote','Изменить',quote.id,'text-button') + action('delete-quote','Удалить',quote.id,'text-button danger-text') : ''}</div></article>`;
     }
     function renderHome() {
         const recent = M.filtered(db,M.defaults()).slice(0,4);
         const recentViews = [...db.views].sort((a,b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)).slice(0,3);
-        const lastQuote = [...db.quotes].sort((a,b) => b.createdAt.localeCompare(a.createdAt))[0];
+        const planned = db.movies.filter(m => m.planned);
+        const suggestion = planned.find(m => m.id === homeMovieId) || pickHomeItem(planned);
+        homeMovieId = suggestion?.id || '';
+        const homeQuote = db.quotes.find(q => q.id === homeQuoteId) || pickHomeItem(db.quotes);
+        homeQuoteId = homeQuote?.id || '';
         page.innerHTML = `<section class="center-hero"><div><p class="eyebrow">ВАШ ЛИЧНЫЙ ЦЕНТР КИНО</p><h1>Истории заканчиваются.<br><em>Ваши впечатления остаются.</em></h1><p>Просмотры, любимые фразы и мысли после титров — всё рядом.</p></div><div class="mini-screen" aria-hidden="true"></div></section>
             <div class="quick-stats">${[['movies',watched().length,'фильмов в коллекции'],['diary',db.views.length,'просмотров'],['quotes',db.quotes.length,'сохранённых цитат'],['collections',db.collections.length,'личных подборок']].map(([p,n,l]) => `<a href="#${p}"><strong>${n}</strong><span>${l}</span><b aria-hidden="true">↗</b></a>`).join('')}</div>
             ${db.presets.length ? `<div class="preset-shortcuts"><span class="small muted">Мои фильтры</span>${db.presets.map(p => action('apply-preset',escape(p.name),p.id,'tag')).join('')}</div>` : ''}
+            <section class="home-suggestion" aria-labelledby="home-suggestion-title"><div><p class="eyebrow">ВАШ СЛЕДУЮЩИЙ СЕАНС</p><h2 id="home-suggestion-title">Что посмотреть сегодня?</h2><p class="muted">Случайный фильм из ваших планов.</p></div>${suggestion ? `<div class="home-suggestion-film">${poster(suggestion,'watchlist-poster')}<div><button type="button" class="title-button" data-action="open-movie" data-id="${escape(suggestion.id)}">${escape(suggestion.title)}</button><p class="small muted">${escape([suggestion.year, suggestion.genre].filter(Boolean).join(' · '))}</p><div class="inline-actions">${action('rewatch','Записать просмотр',suggestion.id,'btn btn-small')}${planned.length > 1 ? action('home-suggest','Другой вариант') : ''}</div></div></div>` : `<div><p>Пока в планах нет фильмов. Сохраните историю, которую хотите посмотреть.</p>${action('new-planned','+ Добавить в планы','','btn btn-outline')}</div>`}</section>
             <div class="section-heading"><h2>Недавно в вашей истории</h2><a href="#movies" class="text-link">Вся коллекция →</a></div>
             <div class="movies-grid">${recent.length ? recent.map(m => movieCard(m)).join('') : empty('Ваш киноархив начинается здесь','Добавьте первый просмотр. Дата, оценка и впечатления — по желанию.',action('new-view','+ Добавить просмотр','','btn'))}</div>
-            <div class="home-columns"><section><div class="section-heading"><h2>Последние вечера</h2><a class="text-link" href="#diary">Дневник →</a></div>${recentViews.length ? recentViews.map(v => viewRow(v,true)).join('') : '<p class="muted">Здесь появятся даты и впечатления от просмотров.</p>'}</section><section><div class="section-heading"><h2>Осталось в памяти</h2><a class="text-link" href="#quotes">Цитатник →</a></div>${lastQuote ? quoteCard(lastQuote,true) : empty('Сохраните первую цитату','Откройте фильм и добавьте фразу, которую хочется запомнить.',action('new-quote','+ Добавить цитату','','btn btn-outline'))}</section></div>`;
+            <div class="home-columns"><section><div class="section-heading"><h2>Последние вечера</h2><a class="text-link" href="#diary">Дневник →</a></div>${recentViews.length ? recentViews.map(v => viewRow(v,true)).join('') : '<p class="muted">Здесь появятся даты и впечатления от просмотров.</p>'}</section><section><div class="section-heading"><h2>Осталось в памяти</h2><a class="text-link" href="#quotes">Цитатник →</a></div>${homeQuote ? quoteCard(homeQuote,true) + (db.quotes.length > 1 ? `<div class="spaced">${action('home-quote','Другая цитата')}</div>` : '') : empty('Сохраните первую цитату','Откройте фильм и добавьте фразу, которую хочется запомнить.',action('new-quote','+ Добавить цитату','','btn btn-outline'))}</section></div>`;
     }
     const filterLabels = {query:'Поиск',type:'Тип',genre:'Жанр',rating:'Оценка от',from:'После',to:'До',quotes:'Цитаты',notes:'Заметки',repeat:'Повторный просмотр',tag:'Тег',company:'С кем',mood:'Настроение',collection:'Подборка'};
     function option(value,label,selectedValue) { return `<option value="${escape(value)}" ${value === selectedValue ? 'selected' : ''}>${escape(label)}</option>`; }
@@ -225,15 +235,19 @@
         formSubmit=onSubmit;if(!formDialog.open)formDialog.showModal();
     }
     function closeForm(){formDialog.close();apiVersion++;clearTimeout(apiTimer);}
-    function movieFields(movie={}) {
-        return `<div class="form-grid">${field('title','Название *',movie.title,'text','required maxlength="300"')}${selectField('type','Тип',Object.entries(types),movie.type||'FILM')}${field('year','Год',movie.year,'number','min="1888" max="2100"')}${field('genre','Жанры через запятую',movie.genre,'text','maxlength="500"')}${field('tags','Личные теги',movie.tags?.join(', '),'text','maxlength="500" placeholder="уютное, хочу пересмотреть"')}${field('poster','Ссылка на постер',movie.poster,'url','placeholder="https://…"')}</div>`;
+    function movieFields(movie={}, compact=false) {
+        const title=field('title','Название *',movie.title,'text','required maxlength="300"');
+        const details=`${selectField('type','Тип',Object.entries(types),movie.type||'FILM')}${field('year','Год',movie.year,'number','min="1888" max="2100"')}${field('genre','Жанры через запятую',movie.genre,'text','maxlength="500"')}${field('tags','Личные теги',movie.tags?.join(', '),'text','maxlength="500" placeholder="уютное, хочу пересмотреть"')}${field('poster','Ссылка на постер',movie.poster,'url','placeholder="https://…"')}`;
+        return compact ? `<div class="form-grid">${title}</div><details class="entry-details spaced"><summary>Дополнительные сведения о фильме</summary><div class="form-grid spaced">${details}</div></details>` : `<div class="form-grid">${title}${details}</div>`;
     }
     function viewFields(view={}) {
-        return `<div class="form-grid spaced">${field('date','Дата просмотра',view.date??M.today(),'date')}${selectField('rating','Оценка этого просмотра',[['0','Без оценки'],...Array.from({length:5},(_,i)=>[String(i+1),'★ '+(i+1)+'/5'])],view.rating||0)}${field('company','С кем смотрели',view.company,'text','maxlength="300" placeholder="Один, с семьёй, с друзьями…"')}${field('mood','Настроение',view.mood,'text','maxlength="300" placeholder="Спокойствие, восторг…"')}${area('note','Что запомнилось',view.note,'maxlength="20000" placeholder="Мысли после титров…"')}</div><p class="field-hint">Не помните дату? Оставьте поле пустым.</p>`;
+        const basic=`<div class="form-grid spaced">${field('date','Дата просмотра',view.date??M.today(),'date')}${selectField('rating','Оценка этого просмотра',[['0','Без оценки'],...Array.from({length:5},(_,i)=>[String(i+1),'★ '+(i+1)+'/5'])],view.rating||0)}</div><p class="field-hint">Не помните дату? Оставьте поле пустым. Оценка тоже необязательна.</p>`;
+        const details=`<div class="form-grid spaced">${field('company','С кем смотрели',view.company,'text','maxlength="300" placeholder="Один, с семьёй, с друзьями…"')}${field('mood','Настроение',view.mood,'text','maxlength="300" placeholder="Спокойствие, восторг…"')}${area('note','Что запомнилось',view.note,'maxlength="20000" placeholder="Мысли после титров…"')}</div>`;
+        return basic+`<details class="entry-details spaced" ${view.id?'open':''}><summary>Впечатления и подробности</summary>${details}</details>`;
     }
     function openEntry(movieId='',viewId='',planned=false) {
         const existing=movieById(movieId),view=db.views.find(v=>v.id===viewId);
-        const picker=!existing?`<label for="entry-existing">Фильм из моего архива</label><select id="entry-existing"><option value="">Новый фильм или сериал</option>${db.movies.map(m=>option(m.id,m.title+(m.year?' · '+m.year:''),'')).join('')}</select><div id="entry-new-fields"><div class="search-container spaced"><label for="api-search">Найти и заполнить сведения</label><input id="api-search" type="search" autocomplete="off" placeholder="Название фильма…" aria-controls="api-results"><div id="api-results" class="search-results" role="region" aria-live="polite" aria-label="Результаты поиска"></div><p class="field-hint">Можно заполнить сведения вручную ниже.</p></div>${movieFields()}</div>`:`<p class="entry-film-title">${escape(existing.title)}</p>`;
+        const picker=!existing?`<label for="entry-existing">Фильм из моего архива</label><select id="entry-existing"><option value="">Новый фильм или сериал</option>${db.movies.map(m=>option(m.id,m.title+(m.year?' · '+m.year:''),'')).join('')}</select><div id="entry-new-fields"><div class="search-container spaced"><label for="api-search">Найти и заполнить сведения</label><input id="api-search" type="search" autocomplete="off" placeholder="Название фильма…" aria-controls="api-results"><div id="api-results" class="search-results" role="region" aria-live="polite" aria-label="Результаты поиска"></div><p class="field-hint">Можно заполнить сведения вручную ниже.</p></div>${movieFields({},true)}</div>`:`<p class="entry-film-title">${escape(existing.title)}</p>`;
         showForm(view?'Изменить просмотр':existing?'Записать просмотр':planned?'Добавить в планы':'Добавить просмотр',picker+(planned?'':viewFields(view)),data=>{
             const chosen=existing?.id || $('#entry-existing')?.value;
             const title=data.get('title')?.trim();
@@ -246,7 +260,7 @@
                 if(!planned){const record={id:view?.id||M.uid('view'),movieId:newMovieId,date:data.get('date')||'',rating:Number(data.get('rating')),note:data.get('note')||'',company:data.get('company')||'',mood:data.get('mood')||'',createdAt:view?.createdAt||new Date().toISOString()};if(view)next.views=next.views.map(v=>v.id===view.id?record:v);else next.views.unshift(record);}
             },planned?'Фильм добавлен в планы':view?'Просмотр обновлён':'Просмотр сохранён');
             closeForm();refresh();
-        });
+        }, planned?'Добавить в планы':view?'Сохранить изменения':'Сохранить просмотр');
     }
     function openQuote(movieId='',quoteId='') {
         if(!db.movies.length){toast('Сначала добавьте фильм в коллекцию или планы.');return;}
@@ -328,8 +342,11 @@
         'delete-movie':id=>confirm('Удалить фильм из архива?','Будут удалены все его просмотры, цитаты и связи с подборками. Действие можно отменить.',()=>commit(next=>M.removeMovie(next,id),'Фильм удалён',true)),
         'plan':id=>{commit(next=>{next.movies.find(m=>m.id===id).planned=true},'Фильм добавлен в планы');refresh()},
         'unplan':id=>{if(!db.views.some(v=>v.movieId===id)){confirm('Убрать фильм из планов?','У фильма нет просмотров. Он будет удалён из архива вместе с цитатами и связями с подборками. Действие можно отменить.',()=>commit(next=>M.removeMovie(next,id),'Фильм убран из планов',true));}else{commit(next=>{next.movies.find(m=>m.id===id).planned=false},'Фильм убран из планов',true);refresh()}},
+        'home-suggest':()=>{homeMovieId=pickHomeItem(db.movies.filter(m=>m.planned),homeMovieId)?.id || '';renderHome();document.querySelector('[data-action="home-suggest"]')?.focus()},
+        'home-quote':()=>{homeQuoteId=pickHomeItem(db.quotes,homeQuoteId)?.id || '';renderHome();document.querySelector('[data-action="home-quote"]')?.focus()},
         'reveal-quote':id=>{revealedQuotes.add(id);refresh()},
         'copy-quote':async id=>{const q=quoteById(id);const value=q.text+'\n— '+movieById(q.movieId).title;try{await navigator.clipboard.writeText(value);toast('Цитата скопирована')}catch(_){showForm('Скопировать цитату',area('copy','Выделите и скопируйте текст',value,'readonly'),()=>closeForm(),'Готово');$('#field-copy').select()}},
+        'poster-quote':id=>{const q=quoteById(id);if(q && (!q.spoiler || revealedQuotes.has(q.id)) && window.CinemaQuotePoster)window.CinemaQuotePoster.open(q,movieById(q.movieId))},
         'quote-tag':tag=>{quoteTag=tag;if(drawer.open)drawer.close();go('quotes')},
         'movie-tag':tag=>{filters={...M.defaults(),tag};if(drawer.open)drawer.close();go('movies')},
         'layout':value=>{layout=value;renderLibrary()},
