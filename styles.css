@@ -496,3 +496,11 @@ button:disabled { opacity: .45; cursor: not-allowed; transform: none !important;
 .account-settings-card .btn { max-width:100%; white-space:normal; text-align:left; }
 .account-page-heading { margin-bottom:10px; }
 @media(max-width:600px){.account-settings-card{padding:20px}.account-settings-grid{grid-template-columns:minmax(0,1fr);}}
+
+/* A personal suggestion from the visitor's own watchlist. */
+.home-suggestion { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 28px; align-items: center; margin: 32px 0; padding: clamp(20px, 3vw, 32px); border: 2px solid #765b34; border-radius: 12px; background: linear-gradient(120deg, #2c2014, #171510 70%); }
+.home-suggestion h2 { margin: 0 0 8px; }
+.home-suggestion-film { display: flex; gap: 18px; align-items: center; min-width: 0; }
+.home-suggestion-film > div { min-width: 0; }
+.home-suggestion-film .watchlist-poster { flex: 0 0 auto; }
+@media (max-width: 700px) { .home-suggestion { grid-template-columns: 1fr; gap: 12px; } }

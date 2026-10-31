@@ -1,0 +1,14 @@
+.quote-poster-dialog { width: min(560px, calc(100% - 24px)); max-height: calc(100dvh - 24px); overflow: auto; color: #f7ecd8; background: #171411; border: 1px solid #a17d4b; border-radius: 16px; padding: 22px; box-shadow: 0 20px 70px #000a; }
+.quote-poster-dialog::backdrop { background: #000b; }
+.quote-poster-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.quote-poster-header h2 { margin: 0; }
+.quote-poster-close { color: #f4e5ce; background: transparent; border: 1px solid #8c724e; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+.quote-poster-hint, .quote-poster-label { color: #e1d0b6; }
+.quote-poster-spoiler { padding: 10px; border: 1px solid #ad8051; border-radius: 8px; color: #ffe0b4; }
+.quote-poster-label { display: flex; align-items: center; gap: .75rem; margin: 12px 0; }
+.quote-poster-label select { background: #241d16; color: #fff1dd; border: 1px solid #a17d4b; border-radius: 6px; padding: 8px; }
+.quote-poster-preview { display: block; width: 100%; height: auto; border-radius: 6px; }
+.quote-poster-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 14px; }
+.quote-poster-error { color: #ffb7a9; }
+.quote-poster-dialog button:disabled { opacity: .45; cursor: not-allowed; }
+.quote-poster-dialog :focus-visible { outline: 3px solid #e5c68f; outline-offset: 3px; }

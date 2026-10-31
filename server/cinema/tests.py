@@ -84,7 +84,7 @@ class SecurityTests(TestCase):
             archive_store.replace(a,data)
             archive_store.replace(b,data)
         revision=Archive.objects.get(user=primary).revision
-        counts=merge_into(primary.pk,secondary.pk,'yandex','yandex-owner',revision)
+        counts=merge_into(primary.pk,secondary.pk,'yandex','yandex-owner',revision,revision)
         self.assertEqual(counts['movies'],2)
         self.assertEqual(counts['views'],2)
         self.assertEqual(counts['quotes'],2)
@@ -96,6 +96,21 @@ class SecurityTests(TestCase):
         self.assertEqual(len({m['id'] for m in merged['movies']}),2)
         self.assertEqual(len({v['id'] for v in merged['views']}),2)
 
+    def test_merge_rejects_changed_secondary_after_preview(self):
+        from . import archive as archive_store
+        from .account_merge import merge_into
+        from django.db import transaction
+        primary=create_user(); secondary=create_user()
+        Identity.objects.create(user=primary,provider='email',subject='owner@example.com')
+        Identity.objects.create(user=secondary,provider='yandex',subject='yandex-owner')
+        with transaction.atomic():
+            archive_store.replace(Archive.objects.select_for_update().get(user=secondary),fixture())
+        with self.assertRaises(ValueError):
+            merge_into(primary.pk,secondary.pk,'yandex','yandex-owner',0,0)
+        self.assertEqual(Identity.objects.get(provider='yandex').user_id,secondary.pk)
+        self.assertTrue(User.objects.get(pk=secondary.pk).is_active)
+        self.assertEqual(Archive.objects.get(user=primary).revision,0)
+
     def test_merge_rejects_secondary_with_another_credential(self):
         from .account_merge import merge_into
         primary=create_user()
@@ -104,7 +119,7 @@ class SecurityTests(TestCase):
         Identity.objects.create(user=secondary,provider='yandex',subject='yandex-owner')
         Identity.objects.create(user=secondary,provider='email',subject='other@example.com')
         with self.assertRaises(ValueError):
-            merge_into(primary.pk,secondary.pk,'yandex','yandex-owner',0)
+            merge_into(primary.pk,secondary.pk,'yandex','yandex-owner',0,0)
         self.assertEqual(Identity.objects.get(provider='yandex').user_id,secondary.pk)
         self.assertTrue(User.objects.get(pk=secondary.pk).is_active)
 
@@ -251,8 +266,17 @@ class SecurityTests(TestCase):
         self.assertTrue(self.save(method='post').json()['alreadyImported'])
         self.assertEqual(self.get_archive().json()['movies'][0]['title'],'Later')
 
-    def test_guest_transfer_cannot_replace_nonempty_account(self):
-        self.login();self.save();self.assertEqual(self.save(rev=1,method='post').status_code,409)
+    def test_guest_transfer_appends_to_nonempty_account_and_is_idempotent(self):
+        self.login(); self.save()
+        guest=fixture(); guest['movies'][0]['title']='Гостевой фильм'
+        self.assertEqual(self.save(guest,1,method='post').status_code,200)
+        result=self.get_archive().json()
+        self.assertEqual([x['title'] for x in result['movies']],['Личный фильм','Гостевой фильм'])
+        self.assertEqual(len(result['views']),2)
+        self.assertEqual(len(result['quotes']),2)
+        self.assertEqual(len({x['id'] for x in result['movies']}),2)
+        self.assertTrue(self.save(guest,2,method='post').json()['alreadyImported'])
+        self.assertEqual(len(self.get_archive().json()['movies']),2)
 
     def test_duplicate_json_fields_rejected(self):
         self.assertEqual(self.client.post('/api/auth/email/start',data='{"email":"a@example.com","email":"b@example.com"}',content_type='application/json',HTTP_X_CSRFTOKEN=self.state['csrf']).status_code,400)

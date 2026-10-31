@@ -162,7 +162,8 @@
         if (saving || failed) throw Error('Сначала завершите сохранение или разрешите конфликт.');
         const guest = M.load(localStorage).data;
         const content = shell('Перенести гостевой архив?');
-        paragraph(content, `В этом браузере: ${guest.movies.length} фильмов, ${guest.views.length} просмотров, ${guest.quotes.length} цитат. Перенос возможен в пустой аккаунт. Исходная копия останется в браузере до её явного удаления.`);
+        paragraph(content, `В аккаунте: ${archive.movies.length} фильмов, ${archive.views.length} просмотров, ${archive.quotes.length} цитат. В этом браузере: ${guest.movies.length} фильмов, ${guest.views.length} просмотров, ${guest.quotes.length} цитат. Записи будут добавлены к архиву аккаунта. Одинаковые фильмы останутся отдельными записями. Исходная копия останется в браузере до её явного удаления.`);
+        addButton(content, 'Скачать копию аккаунта', () => download(archive,'CineDairy-account.json'));
         addButton(content, 'Скачать гостевую копию', () => download(guest,'CineDairy-guest.json'));
         addButton(content, 'Подтвердить перенос', async () => {
             await request('/api/archive','POST',{archive:guest,expectedRevision:revision}); location.reload();
@@ -214,7 +215,7 @@
                 details.textContent = 'Основной аккаунт: '+info.primary.movies+' фильмов, '+info.primary.views+' просмотров, '+info.primary.quotes+' цитат. Аккаунт Яндекса: '+info.secondary.movies+' фильмов, '+info.secondary.views+' просмотров, '+info.secondary.quotes+' цитат.';
                 addButton(merge, 'Подтвердить объединение архивов', async () => {
                     if (!window.confirm('Объединить два аккаунта? Записи обоих архивов сохранятся. Операция требует повторного входа при истечении срока подтверждения.')) return;
-                    await request('/api/account/merge/confirm','POST',{confirm:'MERGE',expectedRevision:info.expectedRevision});
+                    await request('/api/account/merge/confirm','POST',{confirm:'MERGE',expectedRevision:info.expectedRevision,expectedSecondaryRevision:info.expectedSecondaryRevision});
                     mergeOfferPending=false;broadcast();location.reload();
                 }, 'btn');
             }).catch(err => {details.textContent = err.message;});

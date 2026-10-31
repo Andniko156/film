@@ -21,7 +21,7 @@ from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from . import archive as archive_store
-from .account_merge import counts as merge_counts, merge_into
+from .account_merge import counts as merge_counts, merge_into, combine
 from .models import Archive, EmailChallenge, Identity, ImportReceipt, User
 from .security import allow, audit, authenticated, create_user, digest, establish, ip
 from .validation import validate
@@ -362,15 +362,17 @@ def merge_preview(request):
     flow=pending_merge(request)
     if not flow:return error('Срок подтверждения истёк. Повторите привязку Яндекс ID.',403)
     with transaction.atomic():
-        primary=Archive.objects.select_for_update().get(user_id=flow['primary'])
-        secondary=Archive.objects.select_for_update().get(user_id=flow['secondary'])
+        archives={a.user_id:a for a in Archive.objects.select_for_update().filter(
+            user_id__in=[flow['primary'],flow['secondary']]).order_by('user_id')}
+        if len(archives)!=2:return error('Аккаунты недоступны.',409)
+        primary=archives[flow['primary']]; secondary=archives[flow['secondary']]
         identity=Identity.objects.filter(provider=flow['provider'],subject=flow['subject'],user_id=flow['secondary']).exists()
         source=User.objects.get(pk=flow['secondary'])
         if not identity or not source.is_active or Identity.objects.filter(user_id=source.pk).count()!=1 or source.has_usable_password():
             return error('Второй аккаунт имеет дополнительные способы входа. Требуется отдельное подтверждение.',409)
         return JsonResponse({'primary':merge_counts(archive_store.read(primary)),
             'secondary':merge_counts(archive_store.read(secondary)),
-            'expectedRevision':primary.revision, 'expiresSeconds':max(0,600-(int(time.time())-flow['at']))})
+            'expectedRevision':primary.revision, 'expectedSecondaryRevision':secondary.revision, 'expiresSeconds':max(0,600-(int(time.time())-flow['at']))})
 
 
 @authenticated(['POST'])
@@ -379,10 +381,10 @@ def merge_confirm(request):
     if not flow:return error('Срок подтверждения истёк. Повторите привязку Яндекс ID.',403)
     try:
         data=body(request)
-        if set(data)!={'confirm','expectedRevision'} or data['confirm']!='MERGE' or type(data['expectedRevision']) is not int:
+        if set(data)!={'confirm','expectedRevision','expectedSecondaryRevision'} or data['confirm']!='MERGE' or type(data['expectedRevision']) is not int or type(data['expectedSecondaryRevision']) is not int:
             return error('Подтвердите объединение аккаунтов.')
-        result=merge_into(flow['primary'],flow['secondary'],flow['provider'],flow['subject'],data['expectedRevision'])
-    except (ValueError,IntegrityError,KeyError,User.DoesNotExist,Archive.DoesNotExist) as e:
+        result=merge_into(flow['primary'],flow['secondary'],flow['provider'],flow['subject'],data['expectedRevision'],data['expectedSecondaryRevision'])
+    except (ValueError,IntegrityError,KeyError,User.DoesNotExist,Archive.DoesNotExist,Identity.DoesNotExist) as e:
         return error(str(e) if isinstance(e,ValueError) else 'Не удалось выполнить объединение.',409)
     request.session.pop('pending_merge',None)
     audit('oauth_merge_completed',request.user)
@@ -411,9 +413,13 @@ def archive(request):
             return JsonResponse({'revision':saved.revision,'alreadyImported':True})
         if saved.revision!=expected:
             return JsonResponse({'error':'Архив изменён на другом устройстве. Скачайте несохранённую копию и загрузите актуальный архив.','conflict':True,'revision':saved.revision},status=409)
-        # Guest transfer only into an empty account. Replacement of a nonempty archive uses PUT with explicit UI confirmation.
-        if importing and (saved.movies.exists() or saved.collections.exists() or saved.presets.exists()):
-            return error('В аккаунте уже есть записи. Сохраните обе копии и используйте явное восстановление архива.',409)
+        # Append the guest archive without replacing personal entries. IDs and references
+        # are remapped on collision; similarly named films are kept as separate records.
+        if importing:
+            try:
+                candidate=combine(archive_store.read(saved),candidate)
+            except ValueError as exc:
+                return error(str(exc),409)
         archive_store.replace(saved,candidate)
         if importing: ImportReceipt.objects.create(archive=saved,digest=digest_value)
         audit('archive_imported' if importing else 'archive_saved',request.user)
@@ -446,7 +452,7 @@ def catalog(request):
 
 @require_GET
 def asset(request,name='index.html'):
-    if name not in ('index.html','styles.css','model.js','account.js','app.js','favicon.jpg','robots.txt','sitemap.xml'): return error('Не найдено.',404)
+    if name not in ('index.html','styles.css','quote-card.css','model.js','account.js','quote-card.js','app.js','favicon.jpg','robots.txt','sitemap.xml'): return error('Не найдено.',404)
     mime= ('text/html' if name.endswith('.html') else 'text/css' if name.endswith('.css') else
           'image/jpeg' if name.endswith('.jpg') else 'text/plain' if name.endswith('.txt') else
           'application/xml' if name.endswith('.xml') else 'application/javascript')

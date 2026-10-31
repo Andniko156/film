@@ -39,7 +39,7 @@ def combine(primary, secondary):
     for key in KINDS:result[key].extend(source[key])
     return validate(result)
 
-def merge_into(primary_id, secondary_id, provider, subject, expected_revision):
+def merge_into(primary_id, secondary_id, provider, subject, expected_revision, expected_secondary_revision):
     """Run inside transaction. Source user and archive retained inactive for recovery."""
     with transaction.atomic():
         users=list(User.objects.select_for_update().filter(pk__in=[primary_id,secondary_id]).order_by('pk'))
@@ -49,7 +49,8 @@ def merge_into(primary_id, secondary_id, provider, subject, expected_revision):
         if not primary.is_active or not secondary.is_active:raise ValueError('Аккаунт недоступен.')
         archives={a.user_id:a for a in Archive.objects.select_for_update().filter(user_id__in=[primary_id,secondary_id]).order_by('user_id')}
         main=archives[primary_id];other=archives[secondary_id]
-        if main.revision!=expected_revision:raise ValueError('Архив изменился. Обновите страницу.')
+        if main.revision!=expected_revision or other.revision!=expected_secondary_revision:
+            raise ValueError('Один из архивов изменился. Обновите страницу и проверьте сведения заново.')
         linked=Identity.objects.select_for_update().get(provider=provider,subject=subject)
         if linked.user_id!=secondary_id:raise ValueError('Привязка изменилась.')
         if Identity.objects.filter(user_id=primary_id,provider=provider).exists():raise ValueError('Способ входа уже привязан.')
