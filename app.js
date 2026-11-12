@@ -37,7 +37,8 @@
         const el = document.createElement('div'); el.className = 'notification';
         const label = document.createElement('span'); label.textContent = message; el.append(label);
         if (undo) { const b = document.createElement('button'); b.className = 'text-button'; b.type = 'button'; b.textContent = 'Отменить'; b.dataset.action = 'undo'; el.append(b); }
-        if (stack.children.length >= 3) stack.firstElementChild.remove();
+        if (window.CinemaPhone) stack.replaceChildren();
+        else if (stack.children.length >= 3) stack.firstElementChild.remove();
         stack.append(el); setTimeout(() => el.remove(), undo ? 15000 : 5000);
     }
     function commit(change, message, undo = false) {

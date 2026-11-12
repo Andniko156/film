@@ -37,6 +37,10 @@ const root=path.resolve(__dirname,'..');
         return route.fulfill({contentType:filename.endsWith('.js')?'application/javascript':filename.endsWith('.css')?'text/css':filename.endsWith('.jpg')?'image/jpeg':'text/html',body});
     });
     const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
+    async function navigate(route) {
+        await page.locator(`.phone-nav a[href="#${route}"]`).click();
+        await page.waitForFunction(route=>document.body.dataset.page===route,route);
+    }
     await page.goto('https://cinedairy.test/');
     await page.getByText('Всё синхронизировано',{exact:true}).waitFor();
     failure=true;
@@ -83,26 +87,30 @@ const root=path.resolve(__dirname,'..');
     await page.getByRole('button',{name:/Фильтры:/}).click();
     await page.locator('#phone-filters [data-action="clear-filters"]').click();
     await page.getByRole('button',{name:'Показать фильмы',exact:true}).click();
+    await page.getByRole('button',{name:'Выбрать фильмы',exact:true}).click();
+    assert.equal(await page.locator('body.phone-selecting').count(),0);
     for(const width of [320,360,393,430,600]){
         await page.setViewportSize({width,height:844});
         for(const route of ['home','movies','diary','quotes']){
-            await page.locator(`.phone-nav a[href="#${route}"]`).click();
+            await navigate(route);
             assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`overflow ${width}/${route}`);
             const nav=await page.locator('.phone-nav').boundingBox();assert.ok(nav.y>=760&&nav.y+nav.height<=845);
             for(const el of await page.locator('.phone-nav a,.phone-nav button,.phone-fab:not([hidden]),.header-content > .phone-icon-button,.account-button').all()){
                 const box=await el.boundingBox();assert.ok(box.width>=48&&box.height>=48,'48px primary target');
             }
         }
-        await page.locator('.phone-nav a[href="#movies"]').click();
+        await navigate('movies');
         const card=await page.locator('.phone-movie-card').first().boundingBox();assert.ok(card.y<420,`content visible above fold at ${width}`);
     }
     await page.setViewportSize({width:393,height:852});
     if(process.env.SCREENSHOT_DIR){
+        await page.waitForFunction(()=>!document.querySelector('.notification'));
         await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'android-collection.png')});
         await page.getByRole('button',{name:'Фильтры и вид',exact:true}).click();
         await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'android-filters.png')});
         await page.getByRole('button',{name:'Показать фильмы',exact:true}).click();
-        await page.locator('.phone-nav a[href="#home"]').click();
+        await navigate('home');
+        await page.locator('.center-hero').waitFor();
         await page.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'android-home.png')});
     }
     await page.locator('.phone-fab').click();
