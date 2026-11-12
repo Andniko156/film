@@ -13,3 +13,10 @@ backups/
 *.dump.age*
 *.agekey
 index.previous.html
+
+# Android generated files and local signing material
+.gradle/
+**/build/
+local.properties
+*.jks
+*.keystore

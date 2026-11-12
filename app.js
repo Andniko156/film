@@ -412,13 +412,18 @@
     drawer.addEventListener('close',()=>{for(const notice of [...$('#drawer-notifications').children])$('#notifications').append(notice)});
     window.addEventListener('hashchange',()=>{if(loaded)navigate()});
     window.addEventListener('storage',event=>{if(!Account?.user&&event.key===M.KEY&&event.newValue!==expectedRaw)toast('Архив обновлён в другой вкладке. Обновите страницу перед изменениями.')});
+    window.addEventListener('cinedairy:archive', event => {
+        if (!loaded) return;
+        db = structuredClone(event.detail); expectedRaw = JSON.stringify(db);
+        mutation++; lastUndo = null; refresh();
+    });
     async function initialize(){try{
         storage=Account?await Account.init():localStorage;
         const initial=M.load(storage);db=initial.data;expectedRaw=initial.raw;loaded=true;navigate();
     }catch(error){
         document.querySelectorAll('header button,header input').forEach(el=>{el.disabled=true});
         page.innerHTML=heading('ДАННЫЕ СОХРАНЕНЫ','Не удалось открыть архив','Сервис не перезаписал коллекцию. Скачайте исходные данные для восстановления.')+`<p class="form-error">${escape(error.message)}</p><button class="btn" id="rescue-export">Скачать исходные данные</button>`;
-        $('#rescue-export').addEventListener('click',()=>{let raw={};try{raw={archive:localStorage.getItem(M.KEY),movies:localStorage.getItem('movies'),watchlist:localStorage.getItem('watchlist')}}catch(_){}download(raw,'CineDairy-recovery.json')});
+        $('#rescue-export').addEventListener('click',()=>{let raw={};try{raw={androidAccount:window.CinemaOffline?localStorage.getItem(window.CinemaOffline.KEY):null,archive:localStorage.getItem(M.KEY),movies:localStorage.getItem('movies'),watchlist:localStorage.getItem('watchlist')}}catch(_){}download(raw,'CineDairy-recovery.json')});
     }}
     initialize();
 })();

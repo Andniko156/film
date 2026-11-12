@@ -1,0 +1,15 @@
+:root { color-scheme: dark; }
+html { -webkit-tap-highlight-color: transparent; }
+body { overscroll-behavior-y: contain; }
+.android-app .site-header { position: relative; }
+.android-app .account-banner { padding-top: 10px; padding-bottom: 10px; font-size: 13px; }
+.android-app input, .android-app textarea, .android-app select { font-size: 16px; }
+.android-app button, .android-app .primary-nav a { min-height: 44px; }
+.android-app .primary-nav { scrollbar-width: none; }
+.android-app .global-search kbd { display: none; }
+@media (max-width: 600px) {
+    .android-app .header-content { gap: 12px; }
+    .android-app .modal { max-height: 94dvh; }
+    .android-app .account-banner { display: flex; flex-wrap: wrap; gap: 8px; }
+    .android-app .account-banner > span { flex-basis: 100%; }
+}

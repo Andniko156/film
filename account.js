@@ -1,13 +1,55 @@
-/* Same-origin sessions. Account archives live in memory only, never localStorage. */
+/* Same-origin sessions. Website: memory only. Bundled Android: durable offline outbox. */
 (function () {
     'use strict';
     const M = window.CinemaModel;
     let state = null, raw = null, saving = false, failed = false, revision = 0, archive = null;
     let beforeImport = null, initialized = false, mergeOfferPending = false;
     let channel;
+    const mobile = Boolean(window.CINEDAIRY_ANDROID && window.CinemaOffline);
+    let offline = null, retryTimer = null, retryDelay = 5000;
+    function mobileSession(value) { return {...value, yandexEnabled: false}; }
+    function scheduleSync(delay = 500) {
+        if (!mobile || !offline?.record) return;
+        clearTimeout(retryTimer);
+        retryTimer = setTimeout(syncMobile, delay);
+    }
+    function publishMobile() {
+        const changed = raw !== offline.raw;
+        raw = offline.raw; archive = structuredClone(offline.record.data); revision = offline.record.base;
+        normalStatus();
+        if (changed && initialized) window.dispatchEvent(new CustomEvent('cinedairy:archive', {detail: archive}));
+    }
+    async function syncMobile() {
+        if (!offline?.record || offline.running || document.hidden) return;
+        await offline.sync(request, next => { state = mobileSession(next); });
+        publishMobile();
+        if (offline.status === 'synced') retryDelay = 5000;
+        else if (offline.status === 'offline') retryDelay = Math.min(retryDelay * 2, 300000);
+        if (!['auth', 'conflict', 'invalid'].includes(offline.status)) scheduleSync(offline.pending ? retryDelay : 30000);
+    }
+    function confirmMobileExit() {
+        if (mobile && (offline?.pending || offline?.running)) throw Error('Сначала синхронизируйте изменения. Для удаления только локальной копии используйте отдельную кнопку в разделе архива.');
+    }
+    function forgetMobile() { if (mobile) { clearTimeout(retryTimer); offline?.clear(); } }
+    function resolveMobile() {
+        const content = shell('Архив изменён на двух устройствах');
+        paragraph(content, 'Изменения телефона сохранены. Сначала скачайте обе версии. Выбранная версия заменит другую целиком; автоматического объединения нет.');
+        addButton(content, 'Скачать версию телефона', () => download(offline.record.data, 'CineDairy-phone.json'));
+        if (offline.remote) {
+            addButton(content, 'Скачать серверную версию', () => download(offline.remote, 'CineDairy-server.json'));
+            addButton(content, 'Оставить версию телефона', () => {
+                if (!confirm('Заменить серверный архив версией телефона?')) return;
+                offline.resolve('local'); dialog.close(); publishMobile(); scheduleSync();
+            });
+            addButton(content, 'Оставить серверную версию', () => {
+                if (!confirm('Заменить локальный архив серверной версией?')) return;
+                offline.resolve('server'); dialog.close(); publishMobile(); scheduleSync();
+            });
+        } else addButton(content, 'Получить серверную версию', async () => { await syncMobile(); resolveMobile(); });
+    }
     const memory = {
         getItem(key) { return key === M.KEY ? raw : key === 'cinedairy.before-import' ? beforeImport : null; },
-        setItem(key, value) { if (key === M.KEY) raw = value; else if (key === 'cinedairy.before-import') beforeImport = value; }
+        setItem(key, value) { if (key === M.KEY) raw = value; else if (key === 'cinedairy.before-import') { if (mobile && offline?.record) offline.write({...offline.record, beforeImport: value}); beforeImport = value; } }
     };
     const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-outline account-button'; button.textContent = 'Аккаунт';
     const banner = document.createElement('div'); banner.className = 'account-banner container'; banner.setAttribute('role', 'status');
@@ -22,13 +64,17 @@
     }
     function download(value, name) {
         const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], {type:'application/json'}));
-        const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+        const a = document.createElement('a'); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
     function clearAccount() { raw = null; archive = null; beforeImport = null; saving = false; failed = false; }
     function leave() { clearAccount(); document.querySelector('main').replaceChildren(); dialog.close(); location.reload(); }
     function broadcast() { channel?.postMessage('session-changed'); }
     async function request(path, method = 'GET', payload) {
-        const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 20000);
+        if (mobile && method !== 'GET' && !state?.csrf) {
+            const fresh = await request('/api/session');
+            state = {...state, csrf: fresh.csrf};
+        }
+        const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), mobile ? 8000 : 20000);
         try {
             const response = await fetch(path, {method, credentials:'same-origin', cache:'no-store', signal:controller.signal,
                 headers:{'Content-Type':'application/json', 'X-CSRFToken':state?.csrf || '', 'X-Film-Account':state?.user?.id || ''},
@@ -40,10 +86,27 @@
         finally { clearTimeout(timer); }
     }
     function normalStatus() {
+        if (mobile && offline?.record) {
+            button.textContent = state.user.email || 'Мой аккаунт';
+            const messages = {
+                local: 'Архив на телефоне · проверяем связь',
+                synced: 'Архив сохранён на телефоне и сервере',
+                pending: 'Сохранено на телефоне · ожидает синхронизации',
+                offline: 'Сервер недоступен · работайте автономно, изменения сохранены на телефоне',
+                auth: 'Архив доступен автономно · для синхронизации войдите в тот же аккаунт',
+                conflict: 'Есть изменения на другом устройстве · выберите версию архива',
+                invalid: 'Сервер не принял архив · локальная копия сохранена. ' + (offline.error?.message || '')
+            };
+            showStatus(messages[offline.status] || messages.local);
+            addButton(banner, 'Синхронизировать', syncMobile);
+            if (offline.status === 'auth') addButton(banner, 'Войти снова', () => passwordDialog(false));
+            if (offline.status === 'conflict') addButton(banner, 'Выбрать версию', resolveMobile);
+            return;
+        }
         if (state?.user) {
             button.textContent = state.user.email || 'Мой аккаунт';
             showStatus('Личный архив · сохранён на сервере');
-        } else { button.textContent = 'Войти'; showStatus('Гостевой архив · хранится в этом браузере. На общем устройстве скачайте копию и очистите гостевые данные.'); }
+        } else { button.textContent = 'Войти'; showStatus(mobile ? 'Гостевой архив · сохранён на телефоне и доступен без интернета' : 'Гостевой архив · хранится в этом браузере. На общем устройстве скачайте копию и очистите гостевые данные.'); }
     }
     function failure(e) {
         failed = true;
@@ -159,6 +222,7 @@
         if(!setup&&state.emailEnabled)addButton(content,'Войти по коду из письма',()=>openEmail(false));
     }
     function guestTransfer() {
+        if (mobile && (offline?.pending || offline?.running)) throw Error('Сначала синхронизируйте архив телефона.');
         if (saving || failed) throw Error('Сначала завершите сохранение или разрешите конфликт.');
         const guest = M.load(localStorage).data;
         const content = shell('Перенести гостевой архив?');
@@ -226,16 +290,31 @@
             addButton(records, 'Перенести гостевой архив', guestTransfer);
         } else paragraph(records, 'Гостевые фильмы хранятся только в этом браузере.');
         addButton(records, 'Управление гостевыми данными', eraseGuest);
+        if (mobile) {
+            paragraph(identity, 'В Android используйте email и пароль или код из письма. Вход через Яндекс доступен на сайте; привяжите email там для входа в этот же аккаунт.');
+            if (offline?.record) {
+                addButton(records, 'Синхронизировать сейчас', syncMobile);
+                addButton(records, 'Скачать копии до разрешения конфликта', () => {
+                    const value = localStorage.getItem(window.CinemaOffline.RECOVERY);
+                    if (!value) throw Error('Сохранённых версий конфликта пока нет.');
+                    download(JSON.parse(value), 'CineDairy-conflict-backup.json');
+                });
+                addButton(records, 'Удалить локальную копию аккаунта', () => {
+                    if (!confirm('Удалить с телефона архив аккаунта, включая неотправленные изменения и резервные версии? Сначала скачайте JSON. Серверные данные сохранятся.')) return;
+                    forgetMobile(); leave();
+                });
+            }
+        }
         if (state?.user) {
             const security = section('Безопасность', 'Управляйте активными сессиями и удалением аккаунта.');
-            addButton(security, 'Выйти', async () => { await request('/api/auth/logout','POST',{});broadcast();leave(); });
-            addButton(security, 'Выйти на всех устройствах', async () => { await request('/api/auth/logout-all','POST',{});broadcast();leave(); });
+            addButton(security, 'Выйти', async () => { confirmMobileExit(); await request('/api/auth/logout','POST',{});forgetMobile();broadcast();leave(); });
+            addButton(security, 'Выйти на всех устройствах', async () => { confirmMobileExit(); await request('/api/auth/logout-all','POST',{});forgetMobile();broadcast();leave(); });
             addButton(security, 'Удалить аккаунт', () => {
                 const content = shell('Удалить аккаунт и весь архив?');
                 paragraph(content, 'Просмотры, цитаты и подборки будут удалены без возможности отмены. Подтвердите вход не более 10 минут назад.');
                 addButton(content, 'Скачать архив перед удалением', () => download(archive,'CineDairy-account.json'));
                 addButton(content, 'Подтвердить удаление аккаунта', async () => {
-                    await request('/api/account/delete','POST',{confirm:'DELETE'}); broadcast(); leave();
+                    confirmMobileExit(); await request('/api/account/delete','POST',{confirm:'DELETE'}); forgetMobile(); broadcast(); leave();
                 }, 'btn btn-danger');
             }, 'text-button danger-text');
         }
@@ -243,11 +322,13 @@
     button.addEventListener('click', () => { location.hash = 'account'; });
     window.addEventListener('beforeunload',e=>{if(saving||failed){e.preventDefault();e.returnValue=''}});
     async function checkSession() {
+        if (mobile && initialized) { if (offline?.record) scheduleSync(0); return; }
         if(!initialized||!state||document.hidden||saving)return;
         try { const next=await request('/api/session'); if(next.user?.id!==state.user?.id)leave(); else state.csrf=next.csrf; } catch(_) {}
     }
     try { channel = new BroadcastChannel('film-session'); channel.onmessage=()=>checkSession(); } catch(_) {}
     document.addEventListener('visibilitychange',checkSession);
+    window.addEventListener('online', () => { retryDelay = 5000; if (offline?.record) scheduleSync(0); else if (mobile && initialized) location.reload(); });
     window.addEventListener('pageshow',e=>{if(e.persisted)leave()});
     setInterval(checkSession,30000);
     window.CinemaAccount = {
@@ -258,23 +339,44 @@
         open:() => {location.hash='account';},
         renderPage:accountPage,
         async init() {
-            const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+            if (mobile) {
+                offline = new window.CinemaOffline.Store(localStorage);
+                if (offline.record) {
+                    state = mobileSession({...offline.record.session, csrf: ''});
+                    beforeImport = offline.record.beforeImport || null;
+                    publishMobile(); initialized = true; scheduleSync(0); return memory;
+                }
+            }
+            const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),mobile ? 2000 : 8000);
             try {
                 const response=await fetch('/api/session',{credentials:'same-origin',cache:'no-store',signal:controller.signal});
-                if(response.status===404){state=null;normalStatus();initialized=true;return localStorage;}
+                if(response.status===404 && !mobile){state=null;normalStatus();initialized=true;return localStorage;}
                 if(!response.ok)throw Error('Не удалось проверить аккаунт. Обновите страницу; локальный архив не изменён.');
                 state=await response.json();
+                if (mobile) state = mobileSession(state);
                 if(typeof state.csrf!=='string')throw Error('Неверный ответ сервера.');
-                if(state.user){archive=M.validate(await request('/api/archive'));revision=archive.revision;raw=JSON.stringify(archive);}
+                if(state.user){archive=M.validate(await request('/api/archive'));revision=archive.revision;raw=JSON.stringify(archive);if(mobile){offline.attach(state,archive);offline.status='synced';scheduleSync(30000);}}
                 initialized=true;normalStatus();
                 if(location.hash==='#account-error'){showStatus('Не удалось подтвердить вход через Яндекс. Попробуйте снова.');history.replaceState(null,'','#account');}
                 if(location.hash==='#account-merge'){mergeOfferPending=true;history.replaceState(null,'','#account');}
                 if(location.hash==='#account-link-conflict'){showStatus('Этот Яндекс ID уже привязан к другому аккаунту. Архивы не объединены и не удалены. Войдите прежним способом и проверьте ID аккаунта в настройках.');history.replaceState(null,'','#account');}
                 return state.user?memory:localStorage;
-            } catch(e){showStatus('Аккаунт временно недоступен. Данные не перезаписаны.');throw e;}
+            } catch(e){
+                if (mobile && !state?.user) {
+                    state = {user:null, csrf:'', emailEnabled:true, passwordEnabled:true, yandexEnabled:false};
+                    initialized=true; normalStatus(); return localStorage;
+                }
+                showStatus('Аккаунт временно недоступен. Данные не перезаписаны.');throw e;
+            }
             finally{clearTimeout(timer);}
         },
         persist(next, expectedRaw, onSaved) {
+            if (mobile && offline?.record) {
+                offline.save(next, expectedRaw);
+                raw=offline.raw; archive=structuredClone(next);
+                if (!['conflict','auth','invalid'].includes(offline.status)) offline.status='pending';
+                normalStatus(); scheduleSync(); queueMicrotask(() => onSaved?.()); return raw;
+            }
             if(!state?.user)throw Error('Войдите в аккаунт.');
             if(saving||failed)throw Error('Дождитесь сохранения или разрешите конфликт в сообщении над страницей.');
             M.validate(next);
