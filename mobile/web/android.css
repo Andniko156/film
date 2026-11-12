@@ -177,6 +177,114 @@ html.android-app {
 .android-app .notification { background:#343b2b; color:#f3f4ea; border:1px solid #65704f; border-radius:14px; }
 .android-app .empty-state { background:#1a1e17; border:1px dashed #4e5841; border-radius:20px; padding:28px 20px; }
 .android-app footer.container { display:none; }
+
+/* Opening shot: a projector beam reveals the lens and wordmark in 960 ms. */
+.launch-splash {
+    position:fixed;
+    inset:0;
+    z-index:100;
+    display:grid;
+    place-items:center;
+    overflow:hidden;
+    pointer-events:none;
+    isolation:isolate;
+    background:radial-gradient(ellipse at 48% 43%, #2c2115 0%, #151310 38%, #0c0c0b 74%);
+    animation:launch-exit 960ms ease both;
+}
+.launch-splash::before {
+    content:'';
+    position:absolute;
+    inset:20px;
+    border:1px solid #c1a26b35;
+    border-radius:18px;
+    background:repeating-linear-gradient(0deg, #e4c18c08 0 1px, transparent 1px 5px);
+    mask-image:linear-gradient(#000, #0004 35%, #0004 65%, #000);
+}
+.launch-beam {
+    position:absolute;
+    inset:0;
+    clip-path:polygon(48% 45%, 100% 23%, 100% 62%, 48% 46%);
+    background:linear-gradient(100deg, transparent 45%, #dfbd7840 58%, #dfbd7804 100%);
+    transform-origin:48% 45%;
+    animation:launch-project 700ms cubic-bezier(.2,.7,.2,1) both;
+}
+.launch-lockup {
+    position:relative;
+    display:grid;
+    justify-items:center;
+    gap:22px;
+    transform:translateY(-9%);
+}
+.launch-lens {
+    width:104px;
+    aspect-ratio:1;
+    position:relative;
+    display:grid;
+    place-items:center;
+    border-radius:50%;
+    border:1px solid #f3d69d;
+    box-shadow:0 0 30px #dbad5b38, 0 0 0 7px #dfbd7812;
+    background:#17150f;
+    animation:launch-lens-in 540ms cubic-bezier(.15,.8,.3,1) both;
+}
+.launch-lens::before {
+    content:'';
+    position:absolute;
+    inset:6px;
+    border-radius:inherit;
+    border:1px solid #c39651;
+    background:repeating-conic-gradient(from -18deg, #4d351d 0deg, #b78343 29deg, #6d4e29 59deg, #3d2916 60deg);
+    animation:launch-aperture 590ms cubic-bezier(.15,.8,.3,1) both;
+}
+.launch-play {
+    position:relative;
+    display:grid;
+    place-items:center;
+    width:54px;
+    aspect-ratio:1;
+    border-radius:50%;
+    border:1px solid #ba9258;
+    background:radial-gradient(circle at 42% 32%, #554026, #1b150d 72%);
+}
+.launch-play::after {
+    content:'';
+    width:18px;
+    height:22px;
+    margin-left:4px;
+    background:linear-gradient(135deg, #fff0c9, #dfb467);
+    clip-path:polygon(0 0, 100% 50%, 0 100%);
+}
+.launch-wordmark {
+    color:#f7f2e9;
+    font-size:clamp(30px, 9vw, 43px);
+    font-weight:650;
+    letter-spacing:-.055em;
+    line-height:1.1;
+    animation:launch-title-in 380ms 170ms cubic-bezier(.2,.7,.2,1) both;
+}
+.launch-wordmark span { color:#dfbd78; padding-inline:.09em; }
+@keyframes launch-lens-in {
+    from { opacity:.12; transform:scale(.83); }
+    to { opacity:1; transform:scale(1); }
+}
+@keyframes launch-aperture {
+    from { transform:rotate(-34deg) scale(.89); }
+    to { transform:rotate(0) scale(1); }
+}
+@keyframes launch-project {
+    from { opacity:0; transform:scaleY(.14); }
+    68% { opacity:1; }
+    to { opacity:.56; transform:scaleY(1); }
+}
+@keyframes launch-title-in {
+    from { opacity:0; transform:translateY(9px); }
+    to { opacity:1; transform:translateY(0); }
+}
+@keyframes launch-exit {
+    0%, 80% { opacity:1; }
+    to { opacity:0; visibility:hidden; }
+}
+
 @media (min-width:600px) {
     .android-app .movies-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
     .android-app .movie-list { grid-template-columns:1fr; }
@@ -193,4 +301,5 @@ html.android-app {
 }
 @media (prefers-reduced-motion:reduce) {
     .android-app * { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
+    .launch-splash { display:none; }
 }

@@ -36,12 +36,46 @@ const root=path.resolve(__dirname,'..');
         if(filename==='index.html')body=body.toString().replace('<script defer src="account.js"></script>','<script defer src="offline.js"></script><script defer src="android-runtime.js"></script><script defer src="phone-ui.js"></script><script defer src="account.js"></script>').replace('<link rel="stylesheet" href="quote-card.css">','<link rel="stylesheet" href="quote-card.css"><link rel="stylesheet" href="android.css">');
         return route.fulfill({contentType:filename.endsWith('.js')?'application/javascript':filename.endsWith('.css')?'text/css':filename.endsWith('.jpg')?'image/jpeg':'text/html',body});
     });
+    // An animated launch works against a failed server and never replays on reload.
+    const launch = await context.newPage();
+    launch.on('pageerror', e => errors.push(e.message));
+    await launch.emulateMedia({reducedMotion:'no-preference'});
+    await launch.addInitScript(() => {
+        document.addEventListener('DOMContentLoaded', () => {
+            const splash = document.querySelector('.launch-splash');
+            if (!splash) return;
+            // Freeze a reproducible frame for visual checks, then let the real exit run.
+            window.launchAnimations = splash.getAnimations({subtree:true});
+            for (const animation of window.launchAnimations) {
+                animation.pause();
+                animation.currentTime = 650;
+            }
+        });
+    });
+    failure = true;
+    await launch.goto('https://cinedairy.test/');
+    const splash = launch.locator('.launch-splash');
+    await splash.waitFor({state:'visible'});
+    assert.equal(await splash.getAttribute('aria-hidden'), 'true');
+    assert.equal(await splash.evaluate(el => getComputedStyle(el).pointerEvents), 'none');
+    if (process.env.SCREENSHOT_DIR) {
+        await launch.screenshot({path:path.join(process.env.SCREENSHOT_DIR,'android-launch.png')});
+    }
+    await launch.evaluate(() => window.launchAnimations.forEach(animation => animation.play()));
+    await splash.waitFor({state:'detached', timeout:2000});
+    await launch.getByText('Гостевой архив · сохранён на телефоне и доступен без интернета',{exact:true}).waitFor();
+    await launch.reload();
+    assert.equal(await splash.count(), 0);
+    await launch.close();
+    failure = false;
+
     const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
     async function navigate(route) {
         await page.locator(`.phone-nav a[href="#${route}"]`).click();
         await page.waitForFunction(route=>document.body.dataset.page===route,route);
     }
     await page.goto('https://cinedairy.test/');
+    assert.equal(await page.locator('.launch-splash').count(), 0, 'reduced motion skips the animation');
     await page.getByText('Всё синхронизировано',{exact:true}).waitFor();
     failure=true;
     async function add(title){
