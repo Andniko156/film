@@ -3,7 +3,7 @@ on:
   pull_request:
     paths: ['mobile/**', '*.js', '*.css', 'index.html', 'tests/**', 'package*.json', '.github/workflows/android.yml']
   push:
-    branches: [main, 'feat/android-offline']
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -45,4 +45,4 @@ jobs:
           name: Android-check-results
           path: |
             mobile/android/app/build/reports/lint-results-debug.html
-            ${{ runner.temp }}/android-offline.png
+            ${{ runner.temp }}/android-*.png

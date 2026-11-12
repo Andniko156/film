@@ -11,8 +11,8 @@ android {
         applicationId 'ru.cinedairy.app'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '0.1.0'
+        versionCode 2
+        versionName '0.2.0'
         buildConfigField 'String', 'SITE_HOST', '"' + siteHost + '"'
     }
     buildFeatures { buildConfig true }
@@ -29,7 +29,7 @@ def prepareWeb = tasks.register('prepareWeb', Copy) {
         include 'index.html', 'styles.css', 'quote-card.css', 'model.js', 'account.js', 'quote-card.js', 'app.js', 'favicon.jpg'
         filesMatching('index.html') {
             filter { line ->
-                line.replace('<script defer src="account.js"></script>', '<script defer src="offline.js"></script><script defer src="android-runtime.js"></script><script defer src="account.js"></script>')
+                line.replace('<script defer src="account.js"></script>', '<script defer src="offline.js"></script><script defer src="android-runtime.js"></script><script defer src="phone-ui.js"></script><script defer src="account.js"></script>')
                     .replace('<link rel="stylesheet" href="quote-card.css">', '<link rel="stylesheet" href="quote-card.css"><link rel="stylesheet" href="android.css">')
             }
         }

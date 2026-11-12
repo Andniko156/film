@@ -90,15 +90,16 @@
             button.textContent = state.user.email || 'Мой аккаунт';
             const messages = {
                 local: 'Архив на телефоне · проверяем связь',
-                synced: 'Архив сохранён на телефоне и сервере',
-                pending: 'Сохранено на телефоне · ожидает синхронизации',
-                offline: 'Сервер недоступен · работайте автономно, изменения сохранены на телефоне',
-                auth: 'Архив доступен автономно · для синхронизации войдите в тот же аккаунт',
-                conflict: 'Есть изменения на другом устройстве · выберите версию архива',
+                synced: 'Всё синхронизировано',
+                pending: 'Сохранено на телефоне · ожидает отправки',
+                offline: 'Нет связи · изменения сохранены на телефоне',
+                auth: 'Локальная копия · войдите для синхронизации',
+                conflict: 'Конфликт версий · выберите, что сохранить',
                 invalid: 'Сервер не принял архив · локальная копия сохранена. ' + (offline.error?.message || '')
             };
+            banner.dataset.status=offline.status;
             showStatus(messages[offline.status] || messages.local);
-            addButton(banner, 'Синхронизировать', syncMobile);
+            addButton(banner, 'Синхронизировать', syncMobile, 'btn btn-outline btn-small phone-sync').setAttribute('aria-label','Синхронизировать');
             if (offline.status === 'auth') addButton(banner, 'Войти снова', () => passwordDialog(false));
             if (offline.status === 'conflict') addButton(banner, 'Выбрать версию', resolveMobile);
             return;

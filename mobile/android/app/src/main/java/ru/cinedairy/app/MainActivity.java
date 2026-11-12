@@ -16,6 +16,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
+import android.widget.FrameLayout;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
@@ -33,7 +34,7 @@ public final class MainActivity extends Activity {
     private static final String ORIGIN = "https://" + BuildConfig.SITE_HOST;
     private static final Set<String> ASSETS = set("index.html", "styles.css", "quote-card.css",
         "model.js", "account.js", "quote-card.js", "app.js", "favicon.jpg",
-        "offline.js", "android-runtime.js", "android.css");
+        "offline.js", "android-runtime.js", "phone-ui.js", "android.css");
     private static Set<String> set(String... values) { return new HashSet<>(Arrays.asList(values)); }
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
@@ -50,9 +51,12 @@ public final class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         web = new WebView(this);
         web.setBackgroundColor(Color.rgb(12, 12, 11));
-        setContentView(web);
+        FrameLayout frame = new FrameLayout(this);
+        frame.setBackgroundColor(Color.rgb(12, 12, 11));
+        frame.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        setContentView(frame);
         // Respect status/navigation bars and the keyboard on edge-to-edge Android 15.
-        web.setOnApplyWindowInsetsListener((v, insets) -> {
+        frame.setOnApplyWindowInsetsListener((v, insets) -> {
             v.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
                 insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets.consumeSystemWindowInsets();
@@ -161,7 +165,7 @@ public final class MainActivity extends Activity {
         super.onPause();
     }
     @Override public void onBackPressed() {
-        web.evaluateJavascript("(function(){const d=document.querySelector('dialog[open]');if(d){d.close();return true;}if(location.hash&&location.hash!=='#home'){location.hash='home';return true;}return false;})()", result -> {
+        web.evaluateJavascript("(function(){const d=document.activeElement?.closest('dialog[open]')||Array.from(document.querySelectorAll('dialog[open]')).pop();if(d){d.close();return true;}if(location.hash&&location.hash!=='#home'){location.hash='home';return true;}return false;})()", result -> {
             if (!"true".equals(result)) finish();
         });
     }
