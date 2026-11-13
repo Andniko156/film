@@ -18,9 +18,11 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.http import FileResponse, HttpResponseRedirect, JsonResponse
 from django.middleware.csrf import get_token
+from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from . import archive as archive_store
+from . import privacy
 from .account_merge import counts as merge_counts, merge_into, combine
 from .models import Archive, EmailChallenge, Identity, ImportReceipt, User
 from .security import allow, audit, authenticated, create_user, digest, establish, ip
@@ -60,6 +62,17 @@ def email_value(value):
     return value
 
 
+def email_consent_valid(request, challenge):
+    if not settings.PRIVACY_ENABLED:
+        return True
+    if not privacy.current(challenge.privacy_proof):
+        return False
+    if challenge.link_user_id:
+        return True  # Linking already verifies the authenticated session below.
+    binding = request.session.get('privacy_challenge_binding')
+    return bool(binding and hmac.compare_digest(challenge.session_digest, digest(binding)))
+
+
 def snapshot(request):
     user = None
     if request.user.is_authenticated:
@@ -69,7 +82,8 @@ def snapshot(request):
     return {'user': user, 'csrf': get_token(request), 'emailEnabled': settings.MAIL_ENABLED,
             'yandexEnabled': bool(settings.YANDEX_CLIENT_ID and settings.YANDEX_CLIENT_SECRET),
             'catalogEnabled': bool(settings.KINOPOISK_API_KEY), 'passwordEnabled': True,
-            'hasPassword': bool(request.user.is_authenticated and request.user.has_usable_password())}
+            'hasPassword': bool(request.user.is_authenticated and request.user.has_usable_password()),
+            'privacyConsentVersion': privacy.consent_document()[1] if settings.PRIVACY_ENABLED else None}
 
 
 @require_GET
@@ -128,10 +142,11 @@ def email_start(request):
     if not settings.MAIL_ENABLED: return error('Вход по почте пока не настроен.', 503)
     try:
         data = body(request)
-        if set(data) - {'email','link'}: raise ValueError('Неизвестные поля.')
+        if set(data) - {'email','link','privacyConsentVersion'}: raise ValueError('Неизвестные поля.')
         email = email_value(data.get('email'))
         linking = data.get('link', False)
         if type(linking) is not bool: raise ValueError('Некорректная операция.')
+        proof = privacy.acceptance(data.get('privacyConsentVersion'))
     except ValueError as e: return error(str(e))
     if request.user.is_authenticated != linking:
         return error('Для привязки почты войдите в аккаунт; для обычного входа выйдите из него.', 409)
@@ -155,6 +170,10 @@ def email_start(request):
         challenge.consumed = False
         challenge.link_user = request.user if linking else None
         challenge.session_digest = digest(request.session.session_key or '') if linking else ''
+        if proof and not linking:
+            binding = request.session.setdefault('privacy_challenge_binding', secrets.token_urlsafe(24))
+            challenge.session_digest = digest(binding)
+        challenge.privacy_proof = proof
         challenge.save()
         nonce = challenge.nonce
     try:
@@ -193,6 +212,8 @@ def register_verify(request):
             challenge=EmailChallenge.objects.select_for_update().filter(email=email).first()
             if not challenge or challenge.consumed or challenge.link_user_id or challenge.expires_at<=timezone.now() or challenge.attempts>=5:
                 return error('Код недействителен или истёк.',400)
+            if not email_consent_valid(request, challenge):
+                return error('Запросите новый код и подтвердите согласие в той же сессии.',409)
             challenge.attempts+=1
             challenge.save(update_fields=['attempts'])
             expected=digest('otp:'+email+':'+str(challenge.nonce)+':'+code)
@@ -204,8 +225,10 @@ def register_verify(request):
             user.set_password(password)
             user.save(update_fields=['password'])
             Identity.objects.create(user=user,provider='email',subject=email)
+            privacy.record(user, challenge.privacy_proof, 'register')
             challenge.consumed=True
-            challenge.save(update_fields=['consumed'])
+            challenge.privacy_proof=None
+            challenge.save(update_fields=['consumed', 'privacy_proof'])
             establish(request,user)
     except IntegrityError:
         return error('Этот email уже связан с аккаунтом. Войдите обычным способом.',409)
@@ -228,6 +251,8 @@ def email_verify(request):
             challenge = EmailChallenge.objects.select_for_update().filter(email=email).first()
             if not challenge or challenge.consumed or challenge.expires_at <= timezone.now() or challenge.attempts >= 5:
                 return error('Код недействителен или истёк.')
+            if not email_consent_valid(request, challenge):
+                return error('Запросите новый код и подтвердите согласие в той же сессии.',409)
             challenge.attempts += 1
             challenge.save(update_fields=['attempts'])
             expected = digest('otp:' + email + ':' + str(challenge.nonce) + ':' + code)
@@ -239,8 +264,10 @@ def email_verify(request):
                     return error('Подтвердите привязку в той же сессии.', 403)
             elif request.user.is_authenticated:
                 return error('Сначала выйдите из текущего аккаунта.', 409)
+            proof = challenge.privacy_proof
             challenge.consumed = True
-            challenge.save(update_fields=['consumed'])
+            challenge.privacy_proof = None
+            challenge.save(update_fields=['consumed', 'privacy_proof'])
             identity = Identity.objects.select_related('user').filter(provider='email', subject=email).first()
             if challenge.link_user_id:
                 user = User.objects.select_for_update().get(pk=request.user.pk)
@@ -251,6 +278,7 @@ def email_verify(request):
                 user = identity.user if identity else create_user()
             if not identity: Identity.objects.create(user=user, provider='email', subject=email)
             if not user.is_active: return error('Вход недоступен.',403)
+            privacy.record(user, proof, 'email-link' if challenge.link_user_id else 'email')
             establish(request,user)
     except IntegrityError:
         return error('Не удалось завершить вход. Запросите новый код.',409)
@@ -280,6 +308,8 @@ def delete_account(request):
     user = request.user
     with transaction.atomic():
         User.objects.select_for_update().get(pk=user.pk)
+        emails = user.identities.filter(provider='email').values_list('subject', flat=True)
+        EmailChallenge.objects.filter(email__in=emails).delete()
         audit('account_deleted',user); logout(request); user.delete()
     return JsonResponse({'ok':True})
 
@@ -289,7 +319,9 @@ def yandex_start(request):
     if not settings.YANDEX_CLIENT_ID or not settings.YANDEX_CLIENT_SECRET: return error('Вход через Яндекс пока не настроен.',503)
     try:
         data=body(request)
-        if set(data) not in ({'link'},{'link','remember'}) or type(data['link']) is not bool or type(data.get('remember',True)) is not bool: raise ValueError('Некорректный запрос.')
+        if set(data) - {'link','remember','privacyConsentVersion'} or type(data.get('link')) is not bool or type(data.get('remember',True)) is not bool:
+            raise ValueError('Некорректный запрос.')
+        proof = privacy.acceptance(data.get('privacyConsentVersion'))
     except ValueError as e: return error(str(e))
     if request.user.is_authenticated != data['link']: return error('Состояние аккаунта изменилось.',409)
     if data['link'] and request.headers.get('X-Film-Account') != request.user.username: return error('Состояние аккаунта изменилось.',409)
@@ -297,7 +329,7 @@ def yandex_start(request):
         return error('Сначала повторно подтвердите вход существующим способом.',403)
     if not allow('oauth-start',ip(request),30,600): return error('Попробуйте позже.',429)
     state=secrets.token_urlsafe(32); verifier=secrets.token_urlsafe(48)
-    request.session['oauth']={'state':state,'verifier':verifier,'at':int(time.time()),'link_user':request.user.pk if data['link'] else None,'remember':data.get('remember',True)}
+    request.session['oauth']={'state':state,'verifier':verifier,'at':int(time.time()),'link_user':request.user.pk if data['link'] else None,'remember':data.get('remember',True),'privacy_proof':proof}
     challenge=base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('=')
     url='https://oauth.yandex.ru/authorize?'+urlencode({'response_type':'code','client_id':settings.YANDEX_CLIENT_ID,
         'redirect_uri':settings.YANDEX_REDIRECT_URI,'state':state,'code_challenge':challenge,'code_challenge_method':'S256','scope':'login:info','force_confirm':'yes'})
@@ -308,6 +340,9 @@ def yandex_start(request):
 def yandex_callback(request):
     flow=request.session.pop('oauth',None)
     if not flow or time.time()-flow['at']>600 or not hmac.compare_digest(request.GET.get('state',''),flow['state']):
+        return HttpResponseRedirect('/#account-error')
+    proof = flow.get('privacy_proof')
+    if not privacy.current(proof):
         return HttpResponseRedirect('/#account-error')
     if bool(flow['link_user']) != request.user.is_authenticated or (flow['link_user'] and flow['link_user']!=request.user.pk):
         return HttpResponseRedirect('/#account-error')
@@ -332,6 +367,7 @@ def yandex_callback(request):
                     # OAuth confirms provider ownership; explicit session-bound consent follows.
                     request.session['pending_merge']={'primary':user.pk,'secondary':identity.user_id,'provider':'yandex',
                         'subject':subject,'at':int(time.time()),'session':digest(request.session.session_key or '')}
+                    privacy.record(user, proof, 'yandex-link')
                     audit('oauth_merge_offered', user)
                     return HttpResponseRedirect('/#account-merge')
                 if existing and existing.subject != subject:
@@ -340,6 +376,7 @@ def yandex_callback(request):
             else: user=identity.user if identity else create_user()
             if not user.is_active: raise ValueError()
             if not identity: Identity.objects.create(user=user,provider='yandex',subject=subject)
+            privacy.record(user, proof, 'yandex-link' if flow['link_user'] else 'yandex')
             establish(request,user,remember=flow.get('remember',True))
         # Provider tokens are discarded; identity is matched by subject, never email.
     except (requests.RequestException, ValueError, KeyError, TypeError, IntegrityError, User.DoesNotExist):
@@ -448,6 +485,20 @@ def catalog(request):
             items.append({k:item.get(k) for k in ('nameRu','nameEn','year','type','genres','posterUrl','posterUrlPreview')})
         return JsonResponse({'items':items})
     except (requests.RequestException,ValueError,TypeError): return error('Поиск недоступен. Добавьте фильм вручную.',502)
+
+
+@require_GET
+def privacy_document(request, consent=False):
+    context = privacy.metadata()
+    context.update({
+        'title': 'Согласие на обработку персональных данных' if consent else 'Политика обработки персональных данных',
+        'content_template': 'privacy/consent_text.html' if consent else 'privacy/policy_text.html',
+    })
+    if consent:
+        _, context['version'] = privacy.consent_document()
+    response = render(request, 'privacy/document.html', context)
+    response['Cache-Control'] = 'no-cache'
+    return response
 
 
 @require_GET

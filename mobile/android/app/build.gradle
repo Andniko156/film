@@ -1,0 +1,41 @@
+plugins { id 'com.android.application' }
+
+def siteHost = providers.gradleProperty('cinedairyHost').getOrElse('cinedairy.ru')
+if (!(siteHost ==~ /[a-zA-Z0-9.-]+/) || siteHost.contains('..')) {
+    throw new GradleException('cinedairyHost must be an HTTPS hostname without port or path')
+}
+android {
+    namespace 'ru.cinedairy.app'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'ru.cinedairy.app'
+        minSdk 26
+        targetSdk 35
+        versionCode 4
+        versionName '0.2.2'
+        buildConfigField 'String', 'SITE_HOST', '"' + siteHost + '"'
+    }
+    buildFeatures { buildConfig true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/cinemaAssets'))
+}
+
+// Reuse the website from the same commit; no network resources are needed to start.
+def prepareWeb = tasks.register('prepareWeb', Copy) {
+    from('../../../') {
+        include 'index.html', 'styles.css', 'quote-card.css', 'model.js', 'account.js', 'quote-card.js', 'app.js', 'favicon.jpg'
+        filesMatching('index.html') {
+            filter { line ->
+                line.replace('<script defer src="account.js"></script>', '<script defer src="offline.js"></script><script defer src="android-runtime.js"></script><script defer src="phone-ui.js"></script><script defer src="account.js"></script>')
+                    .replace('<link rel="stylesheet" href="quote-card.css">', '<link rel="stylesheet" href="quote-card.css"><link rel="stylesheet" href="android.css">')
+            }
+        }
+    }
+    from('../../web') { include '*.js', '*.css' }
+    into(layout.buildDirectory.dir('generated/cinemaAssets'))
+}
+tasks.named('preBuild').configure { dependsOn prepareWeb }
+dependencies { implementation 'androidx.webkit:webkit:1.12.1' }

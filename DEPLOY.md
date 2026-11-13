@@ -33,6 +33,8 @@ chmod 600 .env
 
 ## 3. Первый запуск
 
+Для публикации политики и включения согласия заполните реквизиты и сверяйте эксплуатацию с [PRIVACY.md](PRIVACY.md).
+
 ```sh
 docker compose config --quiet
 docker compose build app migrate backup

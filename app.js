@@ -37,7 +37,8 @@
         const el = document.createElement('div'); el.className = 'notification';
         const label = document.createElement('span'); label.textContent = message; el.append(label);
         if (undo) { const b = document.createElement('button'); b.className = 'text-button'; b.type = 'button'; b.textContent = 'Отменить'; b.dataset.action = 'undo'; el.append(b); }
-        if (stack.children.length >= 3) stack.firstElementChild.remove();
+        if (window.CinemaPhone) stack.replaceChildren();
+        else if (stack.children.length >= 3) stack.firstElementChild.remove();
         stack.append(el); setTimeout(() => el.remove(), undo ? 15000 : 5000);
     }
     function commit(change, message, undo = false) {
@@ -76,6 +77,11 @@
     }
     function movieCard(movie, selectable = false) {
         const views = M.movieViews(db, movie.id), view = views[0];
+        if (window.CinemaPhone) return `<article class="movie-card phone-movie-card ${layout === 'list' && currentPage === 'movies' ? 'list-card' : ''}">
+            <button type="button" class="poster-button" data-action="open-movie" data-id="${escape(movie.id)}" aria-label="Открыть фильм: ${escape(movie.title)}">${poster(movie)}</button>
+            ${selectable ? `<label class="select-card"><input type="checkbox" data-select="${escape(movie.id)}" ${selected.has(movie.id) ? 'checked' : ''} aria-label="Выбрать: ${escape(movie.title)}"></label>` : ''}
+            <div class="movie-info"><button class="title-button" data-action="open-movie" data-id="${escape(movie.id)}">${escape(movie.title)}</button>
+            <div class="phone-card-meta"><span>${escape(movie.year || types[movie.type])}</span><span class="phone-rating" aria-label="${view?.rating ? 'Оценка '+view.rating+' из 5' : 'Без оценки'}">${view?.rating ? '★ '+view.rating : '—'}</span></div></div></article>`;
         return `<article class="movie-card ${layout === 'list' && currentPage === 'movies' ? 'list-card' : ''}">
             <button type="button" class="poster-button" data-action="open-movie" data-id="${escape(movie.id)}" aria-label="Открыть фильм: ${escape(movie.title)}">${poster(movie)}</button>
             <div class="movie-info"><div class="card-title-row"><button class="title-button" data-action="open-movie" data-id="${escape(movie.id)}">${escape(movie.title)}</button>${selectable ? `<label class="select-card"><input type="checkbox" data-select="${escape(movie.id)}" ${selected.has(movie.id) ? 'checked' : ''} aria-label="Выбрать: ${escape(movie.title)}"></label>` : ''}</div>
@@ -110,6 +116,7 @@
             <div class="section-heading"><h2>Недавно в вашей истории</h2><a href="#movies" class="text-link">Вся коллекция →</a></div>
             <div class="movies-grid">${recent.length ? recent.map(m => movieCard(m)).join('') : empty('Ваш киноархив начинается здесь','Добавьте первый просмотр. Дата, оценка и впечатления — по желанию.',action('new-view','+ Добавить просмотр','','btn'))}</div>
             <div class="home-columns"><section><div class="section-heading"><h2>Последние вечера</h2><a class="text-link" href="#diary">Дневник →</a></div>${recentViews.length ? recentViews.map(v => viewRow(v,true)).join('') : '<p class="muted">Здесь появятся даты и впечатления от просмотров.</p>'}</section><section><div class="section-heading"><h2>Осталось в памяти</h2><a class="text-link" href="#quotes">Цитатник →</a></div>${homeQuote ? quoteCard(homeQuote,true) + (db.quotes.length > 1 ? `<div class="spaced">${action('home-quote','Другая цитата')}</div>` : '') : empty('Сохраните первую цитату','Откройте фильм и добавьте фразу, которую хочется запомнить.',action('new-quote','+ Добавить цитату','','btn btn-outline'))}</section></div>`;
+        window.CinemaPhone?.home();
     }
     const filterLabels = {query:'Поиск',type:'Тип',genre:'Жанр',rating:'Оценка от',from:'После',to:'До',quotes:'Цитаты',notes:'Заметки',repeat:'Повторный просмотр',tag:'Тег',company:'С кем',mood:'Настроение',collection:'Подборка'};
     function option(value,label,selectedValue) { return `<option value="${escape(value)}" ${value === selectedValue ? 'selected' : ''}>${escape(label)}</option>`; }
@@ -135,6 +142,7 @@
             <div class="preset-bar"><label class="sr-only" for="saved-filter">Сохранённые фильтры</label><select id="saved-filter"><option value="">Мои сохранённые фильтры</option>${db.presets.map(p=>option(p.id,p.name,'')).join('')}</select>${action('save-preset','Сохранить текущий фильтр')}${action('clear-filters','Сбросить','','text-button')}<label class="sort-label" for="filter-sort">Порядок<select id="filter-sort" data-filter="sort">${[['recent','Сначала недавние'],['oldest','Сначала ранние'],['rating','По оценке'],['title','По названию']].map(([v,l])=>option(v,l,filters.sort)).join('')}</select></label></div>
             <div id="filter-chips" class="tag-row"></div><div id="selection-bar"></div><div id="library-results"></div>`;
         renderLibraryResults();
+        window.CinemaPhone?.library();
     }
     function renderSelection() {
         const el = $('#selection-bar'); if (!el) return;
@@ -153,6 +161,7 @@
         const invalidRange = filters.from && filters.to && filters.from > filters.to;
         $('#library-results').innerHTML = `<p class="result-count" role="status">Найдено: ${rows.length} из ${watched().length}</p>${invalidRange ? '<p class="form-error" role="alert">Дата начала должна быть не позже даты окончания.</p>' : ''}<div class="movies-grid ${layout === 'list' ? 'movie-list' : ''}">${rows.length ? rows.map(m=>movieCard(m,true)).join('') : empty('Ничего не найдено','Попробуйте убрать часть условий или добавьте просмотр.',action('clear-filters','Сбросить фильтры'))}</div>`;
         renderSelection();
+        window.CinemaPhone?.updateFilters();
         for (const key of ['type','genre']) {
             const control=$('#filter-'+key);
             if(control)for(const opt of control.options)if(opt.value){const name=key==='type'?types[opt.value]:opt.value;opt.textContent=`${name} (${filterCount(key,opt.value)})`;}
@@ -208,9 +217,10 @@
     function renderPage() {
         if (!loaded) return;
         const query = $('#global-search').value.trim();
-        if (currentPage === 'account') return Account?.renderPage(page);
-        if (query) return renderSearch(query);
-        ({home:renderHome,movies:renderLibrary,diary:renderDiary,quotes:renderQuotes,collections:renderCollections,watchlist:renderWatchlist,stats:renderStats,data:renderData}[currentPage] || renderHome)();
+        if (currentPage === 'account') Account?.renderPage(page);
+        else if (query) renderSearch(query);
+        else ({home:renderHome,movies:renderLibrary,diary:renderDiary,quotes:renderQuotes,collections:renderCollections,watchlist:renderWatchlist,stats:renderStats,data:renderData}[currentPage] || renderHome)();
+        window.CinemaPhone?.render(currentPage, query);
     }
     function openMovie(id, tab = 'overview') {
         if (!movieById(id)) return;
@@ -412,13 +422,18 @@
     drawer.addEventListener('close',()=>{for(const notice of [...$('#drawer-notifications').children])$('#notifications').append(notice)});
     window.addEventListener('hashchange',()=>{if(loaded)navigate()});
     window.addEventListener('storage',event=>{if(!Account?.user&&event.key===M.KEY&&event.newValue!==expectedRaw)toast('Архив обновлён в другой вкладке. Обновите страницу перед изменениями.')});
+    window.addEventListener('cinedairy:archive', event => {
+        if (!loaded) return;
+        db = structuredClone(event.detail); expectedRaw = JSON.stringify(db);
+        mutation++; lastUndo = null; refresh();
+    });
     async function initialize(){try{
         storage=Account?await Account.init():localStorage;
         const initial=M.load(storage);db=initial.data;expectedRaw=initial.raw;loaded=true;navigate();
     }catch(error){
         document.querySelectorAll('header button,header input').forEach(el=>{el.disabled=true});
         page.innerHTML=heading('ДАННЫЕ СОХРАНЕНЫ','Не удалось открыть архив','Сервис не перезаписал коллекцию. Скачайте исходные данные для восстановления.')+`<p class="form-error">${escape(error.message)}</p><button class="btn" id="rescue-export">Скачать исходные данные</button>`;
-        $('#rescue-export').addEventListener('click',()=>{let raw={};try{raw={archive:localStorage.getItem(M.KEY),movies:localStorage.getItem('movies'),watchlist:localStorage.getItem('watchlist')}}catch(_){}download(raw,'CineDairy-recovery.json')});
+        $('#rescue-export').addEventListener('click',()=>{let raw={};try{raw={androidAccount:window.CinemaOffline?localStorage.getItem(window.CinemaOffline.KEY):null,archive:localStorage.getItem(M.KEY),movies:localStorage.getItem('movies'),watchlist:localStorage.getItem('watchlist')}}catch(_){}download(raw,'CineDairy-recovery.json')});
     }}
     initialize();
 })();

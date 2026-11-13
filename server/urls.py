@@ -2,6 +2,8 @@ from django.urls import path
 from cinema import views
 urlpatterns = [
     path('',views.asset),
+    path('privacy.html', views.privacy_document),
+    path('consent.html', views.privacy_document, {'consent': True}),
     path('api/session',views.session),
     path('api/auth/email/start',views.email_start),
     path('api/auth/password/login',views.password_login),

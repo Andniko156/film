@@ -29,6 +29,7 @@ MIDDLEWARE = [
     'cinema.middleware.SessionLifetime',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+TEMPLATES = [{'BACKEND': 'django.template.backends.django.DjangoTemplates', 'APP_DIRS': True}]
 ROOT_URLCONF = 'urls'
 WSGI_APPLICATION = 'wsgi.application'
 AUTH_USER_MODEL = 'cinema.User'
@@ -84,6 +85,24 @@ YANDEX_CLIENT_ID = os.getenv('YANDEX_CLIENT_ID', '')
 YANDEX_CLIENT_SECRET = os.getenv('YANDEX_CLIENT_SECRET', '')
 YANDEX_REDIRECT_URI = PUBLIC_ORIGIN.rstrip('/') + '/api/auth/yandex/callback'
 KINOPOISK_API_KEY = os.getenv('KINOPOISK_API_KEY', '')
+PRIVACY_ENABLED = os.getenv('PRIVACY_ENABLED') == '1'
+PRIVACY_OPERATOR = os.getenv('PRIVACY_OPERATOR', '').strip()
+PRIVACY_ADDRESS = os.getenv('PRIVACY_ADDRESS', '').strip()
+PRIVACY_EMAIL = os.getenv('PRIVACY_EMAIL', '').strip()
+PRIVACY_HOSTING = os.getenv('PRIVACY_HOSTING', '').strip()
+PRIVACY_MAIL_PROVIDER = os.getenv('PRIVACY_MAIL_PROVIDER', '').strip()
+PRIVACY_BACKUP_DAYS = int(os.getenv('PRIVACY_BACKUP_DAYS') or '0')
+PRIVACY_AUDIT_DAYS = int(os.getenv('PRIVACY_AUDIT_DAYS') or '0')
+if PRIVACY_ENABLED:
+    from django.core.validators import validate_email
+    from django.core.exceptions import ValidationError
+    if not all((PRIVACY_OPERATOR, PRIVACY_ADDRESS, PRIVACY_HOSTING, PRIVACY_MAIL_PROVIDER)) or min(PRIVACY_BACKUP_DAYS, PRIVACY_AUDIT_DAYS) < 1:
+        raise ImproperlyConfigured('Complete PRIVACY_* operator, provider and retention settings before enabling consent')
+    try:
+        validate_email(PRIVACY_EMAIL)
+    except ValidationError as error:
+        raise ImproperlyConfigured('Set a valid PRIVACY_EMAIL') from error
+
 # Avoid request URLs, body, query parameters, mail content and provider tokens in logs.
 LOGGING = {'version': 1, 'disable_existing_loggers': False,
     'handlers': {'null': {'class': 'logging.NullHandler'}, 'console': {'class': 'logging.StreamHandler'}},
