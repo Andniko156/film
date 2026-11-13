@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('fs'),os=require('os'),path=require('path'),cp=require('child_process');
 const root=path.resolve(__dirname,'..'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'film-account-test-'));
 const port=process.env.FILM_TEST_PORT||'8127',base='http://127.0.0.1:'+port;
-const server=cp.spawn(process.env.FILM_PYTHON||'python',['tests/browser_server.py'],{cwd:root,env:{...process.env,FILM_TEST:'1',SQLITE_PATH:path.join(temp,'test.sqlite3'),FILM_TEST_MAILBOX:path.join(temp,'mail.json'),FILM_TEST_PORT:port},stdio:['ignore','pipe','pipe']});
+const server=cp.spawn(process.env.FILM_PYTHON||'python',['tests/browser_server.py'],{cwd:root,env:{...process.env,FILM_TEST:'1',PRIVACY_ENABLED:'1',PRIVACY_OPERATOR:'Тестовый оператор',PRIVACY_ADDRESS:'Тестовый адрес',PRIVACY_EMAIL:'privacy@example.com',PRIVACY_HOSTING:'Тестовый хостинг',PRIVACY_MAIL_PROVIDER:'Тестовый SMTP',PRIVACY_BACKUP_DAYS:'14',PRIVACY_AUDIT_DAYS:'14',SQLITE_PATH:path.join(temp,'test.sqlite3'),FILM_TEST_MAILBOX:path.join(temp,'mail.json'),FILM_TEST_PORT:port},stdio:['ignore','pipe','pipe']});
 let browser;
 (async()=>{
  await new Promise((resolve,reject)=>{server.stdout.on('data',v=>{if(v.toString().includes('ready'))resolve()});server.on('exit',code=>reject(Error('Test server exited '+code)));setTimeout(()=>reject(Error('Test server startup timeout')),15000).unref()});
@@ -14,7 +14,15 @@ let browser;
  const reloadClick=async(p,label)=>Promise.all([p.waitForEvent('load'),click(p,label)]);
  const loaded=async p=>p.locator('.account-banner').getByText(/Гостевой архив|Личный архив/).waitFor();
  const signin=async(p,email)=>{
-  await click(p,'Войти');await click(p,'Войти по email');await p.locator('#account-email').fill(email);await click(p,'Получить код');await p.locator('#account-code').waitFor();
+  await click(p,'Войти');await click(p,'Войти по email');await p.locator('#account-email').fill(email);
+  const consent=p.getByRole('checkbox',{name:'Даю согласие на обработку персональных данных'});
+  assert.equal(await consent.isChecked(),false);
+  const consentLink=p.locator('dialog[open]').getByRole('link',{name:'Текст согласия на обработку персональных данных'});
+  assert.equal(await consentLink.getAttribute('href'),'/consent.html');
+  await click(p,'Получить код');
+  assert.equal(await p.locator('#account-email:invalid').count(),0);
+  assert.equal(await p.locator('#account-code').count(),0);
+  await consent.check();await click(p,'Получить код');await p.locator('#account-code').waitFor();
   const mail=JSON.parse(fs.readFileSync(path.join(temp,'mail.json'),'utf8'));assert.equal(mail.recipient,email);
   await p.locator('#account-code').fill(mail.body.match(/\b\d{8}\b/)[0]);await click(p,'Подтвердить');await p.locator('.account-banner').getByText('Личный архив · сохранён на сервере',{exact:true}).waitFor();
  };

@@ -486,6 +486,8 @@ button:disabled { opacity: .45; cursor: not-allowed; transform: none !important;
 .account-content { display:grid; gap:16px; }
 .account-content form { display:grid; gap:12px; }
 .account-content p { line-height:1.6; overflow-wrap:anywhere; }
+.privacy-links { display:grid; gap:8px; }
+.privacy-links a { text-decoration:underline; text-underline-offset:3px; }
 @media(max-width:600px){.account-button{max-width:100%;}.header-content{flex-wrap:wrap;}.account-banner{font-size:.8rem;}}
 
 /* Standalone account settings page */

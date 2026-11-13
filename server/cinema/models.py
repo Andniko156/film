@@ -18,6 +18,17 @@ class Identity(models.Model):
                        models.UniqueConstraint(fields=['user', 'provider'], name='one_provider_per_user')]
 
 
+class PrivacyConsent(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='privacy_consents')
+    version = models.CharField(max_length=64)
+    document = models.TextField()
+    source = models.CharField(max_length=12)
+    accepted_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['user', 'version', 'source'], name='unique_privacy_consent')]
+
+
 class EmailChallenge(models.Model):
     email = models.CharField(max_length=254, unique=True)
     nonce = models.UUIDField(default=uuid.uuid4)
@@ -28,6 +39,7 @@ class EmailChallenge(models.Model):
     # A linking code is bound to both the signed-in user and their current session.
     link_user = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
     session_digest = models.CharField(max_length=64, blank=True)
+    privacy_proof = models.JSONField(null=True, blank=True)
 
 
 class RateBucket(models.Model):

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }} — CineDairy</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        .legal { max-width: 760px; padding: 24px 0 52px; line-height: 1.65; overflow-wrap: anywhere; }
+        .legal h1 { margin: 24px 0; font-size: clamp(24px, 5vw, 36px); }
+        .legal h2 { font-size: 20px; margin: 24px 0 8px; }
+        .legal li { margin: 10px 0 10px 24px; }
+        .legal p { margin: 12px 0; }
+        .legal a { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <main class="container legal">
+        <a href="/">CineDairy</a>
+        <h1>{{ title }}</h1>
+        {% if not enabled %}<p><strong>Проект документа. Реквизиты и условия обработки подлежат подтверждению оператором.</strong></p>{% endif %}
+        {% include content_template %}
+        {% if version %}<p>Редакция согласия: <code>{{ version }}</code></p>{% endif %}
+        {% if content_template == 'privacy/consent_text.html' %}
+        <p><a href="/privacy.html">Политика обработки персональных данных</a></p>
+        {% else %}
+        <p><a href="/consent.html">Текст согласия на обработку персональных данных</a></p>
+        {% endif %}
+    </main>
+</body>
+</html>

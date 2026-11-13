@@ -425,3 +425,84 @@ class PostgreSQLConcurrencyTests(TransactionTestCase):
         archive.refresh_from_db()
         self.assertEqual(archive.revision,1)
         self.assertEqual(archive_store.read(archive)['quotes'],fixture()['quotes'])
+
+
+@override_settings(
+    PRIVACY_ENABLED=True, PRIVACY_OPERATOR='Тестовый оператор',
+    PRIVACY_ADDRESS='Тестовый адрес', PRIVACY_EMAIL='privacy@example.com',
+    PRIVACY_HOSTING='Тестовая инфраструктура', PRIVACY_MAIL_PROVIDER='Тестовая почта',
+    PRIVACY_BACKUP_DAYS=14, PRIVACY_AUDIT_DAYS=14,
+    YANDEX_CLIENT_ID='test-client', YANDEX_CLIENT_SECRET='test-secret',
+)
+class PrivacyTests(TestCase):
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=True)
+        self.state = self.client.get('/api/session').json()
+        self.version = self.state['privacyConsentVersion']
+        self.email = 'reader@example.com'
+
+    def send(self, path, data, client=None, state=None):
+        client = client or self.client
+        state = state or self.state
+        return client.post(path, data, content_type='application/json', HTTP_X_CSRFTOKEN=state['csrf'],
+                           HTTP_X_FILM_ACCOUNT=(state['user'] or {}).get('id', ''))
+
+    def start(self):
+        result = self.send('/api/auth/email/start', {'email': self.email, 'privacyConsentVersion': self.version})
+        self.assertEqual(result.status_code, 200)
+        return re.search(r'\b\d{8}\b', mail.outbox[-1].body)[0]
+
+    def test_public_policy_and_consent_are_separate(self):
+        policy = self.client.get('/privacy.html')
+        consent = self.client.get('/consent.html')
+        self.assertContains(policy, 'Политика обработки персональных данных')
+        self.assertContains(consent, self.version)
+        self.assertContains(consent, 'Тестовый оператор')
+        self.assertNotContains(consent, 'Проект документа')
+
+    def test_absent_and_stale_consent_are_rejected_before_data_is_stored(self):
+        for version in ({}, {'privacyConsentVersion': 'stale'}):
+            with self.subTest(version=version):
+                result = self.send('/api/auth/email/start', {'email': self.email, **version})
+                self.assertEqual(result.status_code, 400)
+                result = self.send('/api/auth/yandex/start', {'link': False, **version})
+                self.assertEqual(result.status_code, 400)
+        self.assertFalse(EmailChallenge.objects.exists())
+        self.assertFalse(mail.outbox)
+        self.assertNotIn('oauth', self.client.session)
+
+    def test_registration_binds_consent_to_same_session_and_confirmed_account(self):
+        code = self.start()
+        payload = {'email': self.email, 'code': code, 'password': 'Long example passphrase 432156'}
+        other = Client(enforce_csrf_checks=True)
+        other_state = other.get('/api/session').json()
+        self.assertEqual(self.send('/api/auth/register/verify', payload, other, other_state).status_code, 409)
+        self.assertFalse(User.objects.exists())
+        result = self.send('/api/auth/register/verify', payload)
+        self.assertEqual(result.status_code, 200)
+        self.state = result.json()
+        user = User.objects.get(username=self.state['user']['id'])
+        record = user.privacy_consents.get()
+        self.assertEqual(record.version, self.version)
+        self.assertEqual(record.source, 'register')
+        self.assertIn('Тестовый оператор', record.document)
+        self.assertLessEqual(record.accepted_at, timezone.now())
+        self.assertIsNone(EmailChallenge.objects.get().privacy_proof)
+        self.assertEqual(self.send('/api/account/delete', {'confirm': 'DELETE'}).status_code, 200)
+        self.assertFalse(User.objects.exists())
+        self.assertFalse(EmailChallenge.objects.exists())
+        from .models import PrivacyConsent
+        self.assertFalse(PrivacyConsent.objects.exists())
+
+    def test_consent_change_invalidates_in_progress_email_and_yandex_flows(self):
+        code = self.start()
+        result = self.send('/api/auth/yandex/start', {'link': False, 'privacyConsentVersion': self.version})
+        self.assertEqual(result.status_code, 200)
+        flow = self.client.session['oauth']
+        with override_settings(PRIVACY_ADDRESS='Другой адрес'):
+            self.assertEqual(self.send('/api/auth/email/verify', {'email': self.email, 'code': code}).status_code, 409)
+            with patch('cinema.views.requests.post') as provider:
+                callback = self.client.get('/api/auth/yandex/callback', {'state': flow['state'], 'code': 'code'})
+                self.assertEqual(callback['Location'], '/#account-error')
+                provider.assert_not_called()
+        self.assertFalse(User.objects.exists())

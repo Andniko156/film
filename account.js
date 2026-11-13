@@ -6,7 +6,7 @@
     let beforeImport = null, initialized = false, mergeOfferPending = false;
     let channel;
     const mobile = Boolean(window.CINEDAIRY_ANDROID && window.CinemaOffline);
-    let offline = null, retryTimer = null, retryDelay = 5000;
+    let offline = null, retryTimer = null, retryDelay = 5000, deletingAccount = false;
     function mobileSession(value) { return {...value, yandexEnabled: false}; }
     function scheduleSync(delay = 500) {
         if (!mobile || !offline?.record) return;
@@ -20,7 +20,7 @@
         if (changed && initialized) window.dispatchEvent(new CustomEvent('cinedairy:archive', {detail: archive}));
     }
     async function syncMobile() {
-        if (!offline?.record || offline.running || document.hidden) return;
+        if (!offline?.record || offline.running || document.hidden || deletingAccount) return;
         await offline.sync(request, next => { state = mobileSession(next); });
         publishMobile();
         if (offline.status === 'synced') retryDelay = 5000;
@@ -127,6 +127,35 @@
         return content;
     }
     function paragraph(parent, text) { const p = document.createElement('p'); p.textContent = text; parent.append(p); return p; }
+    function privacyLinks(parent) {
+        const links = document.createElement('p');
+        links.className = 'privacy-links';
+        for (const [href, title] of [
+            ['/privacy.html', 'Политика обработки персональных данных'],
+            ['/consent.html', 'Текст согласия на обработку персональных данных']
+        ]) {
+            const link = document.createElement('a');
+            link.href = href;
+            if (!mobile) link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = title;
+            links.append(link);
+        }
+        parent.append(links);
+    }
+    function privacyChoice(form) {
+        const version = state?.privacyConsentVersion;
+        if (!version) return {};
+        privacyLinks(form);
+        const label = document.createElement('label');
+        label.className = 'check-label';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.required = true;
+        label.append(checkbox, 'Даю согласие на обработку персональных данных');
+        form.append(label);
+        return {privacyConsentVersion: version};
+    }
     function field(parent, label, type, name) {
         const l = document.createElement('label'); l.textContent = label; l.htmlFor = 'account-' + name;
         const input = document.createElement('input'); input.id = l.htmlFor; input.name = name; input.type = type; input.required = true;
@@ -144,10 +173,11 @@
         const form = document.createElement('form'); content.append(form);
         const email = field(form, 'Email', 'email', 'email'); email.autocomplete = 'email'; email.maxLength = 254;
         if (link && state.user.email) email.value = state.user.email;
+        const consent = privacyChoice(form);
         const submit = document.createElement('button'); submit.type = 'submit'; submit.className = 'btn spaced'; submit.textContent = 'Получить код'; form.append(submit);
         form.addEventListener('submit', async e => {
             e.preventDefault(); if (!form.reportValidity()) return; submit.disabled = true;
-            try { await request('/api/auth/email/start','POST',{email:email.value,link}); openCode(email.value); }
+            try { await request('/api/auth/email/start','POST',{email:email.value,link,...consent}); openCode(email.value); }
             catch (error) { dialog.querySelector('[role="alert"]').textContent = error.message; }
             finally { submit.disabled = false; }
         });
@@ -165,7 +195,31 @@
         });
         addButton(content, 'Изменить email', () => openEmail(Boolean(state.user)));
     }
-    async function yandex(link) { const data = await request('/api/auth/yandex/start','POST',{link,remember:true}); location.assign(data.url); }
+    function yandex(link) {
+        const content = shell(link ? 'Привязать Яндекс ID' : 'Вход через Яндекс ID');
+        paragraph(content, 'Продолжите в Яндексе, чтобы подтвердить способ входа.');
+        const form = document.createElement('form');
+        const consent = privacyChoice(form);
+        const submit = document.createElement('button');
+        submit.type = 'submit';
+        submit.className = 'btn';
+        submit.textContent = 'Перейти в Яндекс';
+        form.append(submit);
+        content.append(form);
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            if (!form.reportValidity()) return;
+            submit.disabled = true;
+            try {
+                const data = await request('/api/auth/yandex/start', 'POST', {link, remember: true, ...consent});
+                location.assign(data.url);
+            } catch (error) {
+                dialog.querySelector('[role="alert"]').textContent = error.message;
+            } finally {
+                submit.disabled = false;
+            }
+        });
+    }
     function registerDialog() {
         const content=shell('Регистрация в CineDairy');
         paragraph(content,'Укажите email и придумайте пароль. Затем подтвердите адрес восьмизначным кодом из письма.');
@@ -173,12 +227,13 @@
         const email=field(form,'Email','email','register-email');email.autocomplete='email';email.maxLength=254;
         const pass=field(form,'Пароль (от 12 символов)','password','register-password');pass.minLength=12;pass.maxLength=128;pass.autocomplete='new-password';
         const repeat=field(form,'Повторите пароль','password','register-repeat');repeat.autocomplete='new-password';
+        const consent = privacyChoice(form);
         const submit=document.createElement('button');submit.type='submit';submit.className='btn spaced';submit.textContent='Получить код подтверждения';form.append(submit);
         form.addEventListener('submit',async e=>{
             e.preventDefault();if(!form.reportValidity())return;
             if(pass.value!==repeat.value){dialog.querySelector('[role="alert"]').textContent='Пароли не совпадают.';return;}
             submit.disabled=true;
-            try {const value=pass.value;await request('/api/auth/email/start','POST',{email:email.value,link:false});registerCode(email.value,value);}
+            try {const value=pass.value;await request('/api/auth/email/start','POST',{email:email.value,link:false,...consent});registerCode(email.value,value);}
             catch(err){dialog.querySelector('[role="alert"]').textContent=err.message;}
             finally{submit.disabled=false;}
         });
@@ -286,6 +341,8 @@
             }).catch(err => {details.textContent = err.message;});
         }
         const records = section('Личный архив', 'Экспортируйте данные перед любыми изменениями способов входа.');
+        const personal = section('Персональные данные', 'Узнайте, какие данные обрабатывает CineDairy и как направить запрос оператору.');
+        privacyLinks(personal);
         if (state?.user) {
             if (archive) addButton(records, 'Скачать архив JSON', () => download(archive, 'CineDairy-account.json'));
             addButton(records, 'Перенести гостевой архив', guestTransfer);
@@ -312,10 +369,21 @@
             addButton(security, 'Выйти на всех устройствах', async () => { confirmMobileExit(); await request('/api/auth/logout-all','POST',{});forgetMobile();broadcast();leave(); });
             addButton(security, 'Удалить аккаунт', () => {
                 const content = shell('Удалить аккаунт и весь архив?');
-                paragraph(content, 'Просмотры, цитаты и подборки будут удалены без возможности отмены. Подтвердите вход не более 10 минут назад.');
+                paragraph(content, 'Аккаунт и записи удалятся из рабочей базы. Резервные копии удаляются по графику хранения. Подтвердите вход не более 10 минут назад.');
+                if (mobile) paragraph(content, 'Локальная копия и неотправленные правки будут удалены с этого телефона. Если хотите их сохранить, сначала скачайте архив.');
                 addButton(content, 'Скачать архив перед удалением', () => download(archive,'CineDairy-account.json'));
                 addButton(content, 'Подтвердить удаление аккаунта', async () => {
-                    confirmMobileExit(); await request('/api/account/delete','POST',{confirm:'DELETE'}); forgetMobile(); broadcast(); leave();
+                    if (offline?.running) throw Error('Дождитесь завершения текущей синхронизации и повторите удаление.');
+                    deletingAccount = true;
+                    clearTimeout(retryTimer);
+                    try {
+                        await request('/api/account/delete', 'POST', {confirm:'DELETE'});
+                    } catch (error) {
+                        deletingAccount = false;
+                        scheduleSync();
+                        throw error;
+                    }
+                    forgetMobile(); broadcast(); leave();
                 }, 'btn btn-danger');
             }, 'text-button danger-text');
         }

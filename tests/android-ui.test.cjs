@@ -163,6 +163,9 @@ const root=path.resolve(__dirname,'..');
     // Native export bridge receives the archive, including a detached account download link.
     await page.evaluate(()=>{window.CineDairyFiles={postMessage:s=>window.testExport=JSON.parse(s)};});
     await page.getByRole('button',{name:'Мой аккаунт',exact:true}).click();
+    const privacyLink = page.getByRole('link',{name:'Политика обработки персональных данных',exact:true});
+    await privacyLink.waitFor();
+    assert.equal(await privacyLink.getAttribute('href'),'/privacy.html');
     await page.getByRole('button',{name:'Скачать архив JSON',exact:true}).click();
     await page.waitForFunction(()=>window.testExport);
     assert.equal(await page.evaluate(()=>JSON.parse(atob(window.testExport.data)).movies.length),4);
