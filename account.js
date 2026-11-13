@@ -167,7 +167,12 @@
         addButton(content, 'Скачать мою версию', () => download(archive, 'CineDairy-unsaved.json'));
         addButton(content, 'Заменить данными сервера', async () => { const next = await request('/api/archive'); M.validate(next); failed = false; saving = false; location.reload(); });
     }
-    function openEmail(link) {
+    async function openEmail(link) {
+        if (mobile && offline?.record) {
+            // The local archive can predate a new consent version or a session timeout.
+            const fresh = await request('/api/session');
+            state = {...state, csrf: fresh.csrf, privacyConsentVersion: fresh.privacyConsentVersion};
+        }
         const content = shell(link ? 'Подтвердить почту аккаунта' : 'Вход по email');
         paragraph(content, 'Отправим одноразовый код. Он действует 10 минут.');
         const form = document.createElement('form'); content.append(form);

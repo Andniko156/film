@@ -10,6 +10,7 @@ const root=path.resolve(__dirname,'..');
     const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:['--no-sandbox','--disable-dev-shm-usage']});
     const context=await browser.newContext({viewport:{width:360,height:800},reducedMotion:'reduce'});
     let remote=M.blank(),failure=false,user={id:'alice',email:'alice@example.test',providers:['email']},puts=0;
+    let privacyConsentVersion;
     const errors=[];
     await context.route('**/*',async route=>{
         const url=new URL(route.request().url()),pathname=url.pathname;
@@ -17,7 +18,7 @@ const root=path.resolve(__dirname,'..');
         if(pathname.startsWith('/api/')){
             if(failure)return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Сервер недоступен'})});
             let result;
-            if(pathname==='/api/session')result={user,csrf:'test-csrf',emailEnabled:true,passwordEnabled:true,yandexEnabled:true};
+            if(pathname==='/api/session')result={user,csrf:'test-csrf',emailEnabled:true,passwordEnabled:true,yandexEnabled:true,privacyConsentVersion};
             if(pathname==='/api/archive'){
                 if(!user)return route.fulfill({status:401,contentType:'application/json',body:'{}'});
                 if(route.request().method()==='PUT'){
@@ -156,6 +157,13 @@ const root=path.resolve(__dirname,'..');
     await page.getByText('Всё синхронизировано',{exact:true}).waitFor();
     user=null;await page.getByRole('button',{name:'Синхронизировать',exact:true}).click();
     await page.getByRole('button',{name:'Войти снова',exact:true}).waitFor();
+    privacyConsentVersion = 'current-policy';
+    await page.getByRole('button',{name:'Войти снова',exact:true}).click();
+    await page.getByRole('button',{name:'Войти по коду из письма',exact:true}).click();
+    const consent = page.getByRole('checkbox',{name:'Даю согласие на обработку персональных данных'});
+    await consent.waitFor();
+    assert.equal(await consent.isChecked(), false);
+    await page.getByRole('button',{name:'Закрыть',exact:true}).click();
     await add('Дюна');await page.reload();assert.equal((await read()).data.movies.length,4);
     await page.locator('.primary-nav a[href="#movies"]').click();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
